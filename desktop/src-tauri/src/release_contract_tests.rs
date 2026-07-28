@@ -82,6 +82,8 @@ fn linux_packages_have_native_smoke_and_user_documentation() {
     assert!(smoke.contains("pgrep -f 'cy-kaf-client'"));
     assert!(smoke.contains("process diagnostics:"));
     assert!(smoke.contains("window diagnostics:"));
+    assert!(smoke.contains("for _ in $(seq 1 180); do"));
+    assert!(smoke.contains("within 90 seconds"));
     assert!(!smoke.contains("pgrep -f '/cy-kaf-client --desktop --no-browser'"));
     assert!(smoke.contains(r#"--pid "$desktop_pid""#));
     assert!(!smoke.contains("process_is_descendant"));

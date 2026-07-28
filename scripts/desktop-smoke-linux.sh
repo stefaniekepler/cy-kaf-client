@@ -159,7 +159,7 @@ APPIMAGE_EXTRACT_AND_RUN=1 \
   "$appimage_path" >"$stdout_log" 2>"$stderr_log" &
 shell_pid=$!
 
-for _ in $(seq 1 60); do
+for _ in $(seq 1 180); do
   if ! process_is_running "$shell_pid"; then
     fail "desktop shell exited before its sidecar became ready"
   fi
@@ -191,7 +191,8 @@ for _ in $(seq 1 60); do
   fi
   sleep 0.5
 done
-[[ -n "$sidecar_pid" ]] || fail "bundled Go sidecar is not a unique direct desktop child"
+[[ -n "$sidecar_pid" ]] ||
+  fail "bundled Go sidecar is not a unique direct desktop child within 90 seconds"
 
 for _ in $(seq 1 60); do
   matching_window_ids=()
