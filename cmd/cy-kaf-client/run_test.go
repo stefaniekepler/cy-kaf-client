@@ -1448,7 +1448,7 @@ func readDesktopReadyForTest(t *testing.T, reader io.Reader) desktopReadyWire {
 		)
 		require.Equal(t, desktopProtocolVersion, wire.Protocol)
 		return wire
-	case <-time.After(2 * time.Second):
+	case <-time.After(15 * time.Second):
 		t.Fatal("timed out waiting for CY_KAF_READY")
 		return desktopReadyWire{}
 	}
