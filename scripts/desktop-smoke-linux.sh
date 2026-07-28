@@ -11,7 +11,7 @@ if [[ "$(uname -s)" != "Linux" ]]; then
   exit 2
 fi
 
-for command_name in lsof pgrep ps sed xdotool; do
+for command_name in lsof openbox pgrep ps sed xdotool xprop; do
   if ! command -v "$command_name" >/dev/null 2>&1; then
     echo "required command not found: $command_name" >&2
     exit 2
@@ -31,9 +31,13 @@ smoke_directory="$(mktemp -d "$smoke_tmp_root/cy-kaf-desktop-linux-smoke.XXXXXX"
 config_path="$smoke_directory/config.yaml"
 stdout_log="$smoke_directory/stdout.log"
 stderr_log="$smoke_directory/stderr.log"
+window_manager_stdout_log="$smoke_directory/window-manager-stdout.log"
+window_manager_stderr_log="$smoke_directory/window-manager-stderr.log"
 shell_pid=""
+desktop_pid=""
 sidecar_pid=""
 window_id=""
+window_manager_pid=""
 
 process_is_running() {
   local target_pid="$1"
@@ -42,15 +46,47 @@ process_is_running() {
   [[ -n "$state" && "$state" != Z* ]]
 }
 
+process_is_descendant() {
+  local candidate_pid="$1"
+  local ancestor_pid="$2"
+  local current_pid="$candidate_pid"
+  local parent_pid
+
+  while [[ "$current_pid" =~ ^[1-9][0-9]*$ ]]; do
+    if [[ "$current_pid" == "$ancestor_pid" ]]; then
+      return 0
+    fi
+    parent_pid="$(ps -p "$current_pid" -o ppid= 2>/dev/null | tr -d '[:space:]' || true)"
+    if [[ ! "$parent_pid" =~ ^[1-9][0-9]*$ || "$parent_pid" == "$current_pid" ]]; then
+      return 1
+    fi
+    current_pid="$parent_pid"
+  done
+  return 1
+}
+
 cleanup() {
-  if [[ -n "$shell_pid" ]] && process_is_running "$shell_pid"; then
-    kill -TERM "$shell_pid" 2>/dev/null || true
-  fi
   if [[ -n "$sidecar_pid" ]] && process_is_running "$sidecar_pid"; then
     kill -TERM "$sidecar_pid" 2>/dev/null || true
   fi
+  if [[ -n "$desktop_pid" && "$desktop_pid" != "$shell_pid" ]] &&
+    process_is_running "$desktop_pid"; then
+    kill -TERM "$desktop_pid" 2>/dev/null || true
+  fi
+  if [[ -n "$shell_pid" ]] && process_is_running "$shell_pid"; then
+    kill -TERM "$shell_pid" 2>/dev/null || true
+  fi
+  if [[ -n "$window_manager_pid" ]] && process_is_running "$window_manager_pid"; then
+    kill -TERM "$window_manager_pid" 2>/dev/null || true
+  fi
   if [[ -n "$shell_pid" ]]; then
     wait "$shell_pid" 2>/dev/null || true
+  fi
+  if [[ -n "$desktop_pid" && "$desktop_pid" != "$shell_pid" ]]; then
+    wait "$desktop_pid" 2>/dev/null || true
+  fi
+  if [[ -n "$window_manager_pid" ]]; then
+    wait "$window_manager_pid" 2>/dev/null || true
   fi
   case "$smoke_directory" in
     "$smoke_tmp_root"/cy-kaf-desktop-linux-smoke.*)
@@ -72,6 +108,10 @@ fail() {
     echo "desktop stderr:" >&2
     sed -n '1,120p' "$stderr_log" >&2
   fi
+  if [[ -s "$window_manager_stderr_log" ]]; then
+    echo "window manager stderr:" >&2
+    sed -n '1,120p' "$window_manager_stderr_log" >&2
+  fi
   exit 1
 }
 
@@ -80,6 +120,25 @@ mkdir -p \
   "$smoke_directory/cache" \
   "$smoke_directory/config" \
   "$smoke_directory/data"
+
+openbox --sm-disable \
+  >"$window_manager_stdout_log" \
+  2>"$window_manager_stderr_log" &
+window_manager_pid=$!
+
+window_manager_ready=""
+for _ in $(seq 1 50); do
+  if ! process_is_running "$window_manager_pid"; then
+    fail "Openbox exited before becoming ready"
+  fi
+  window_manager_state="$(xprop -root _NET_SUPPORTING_WM_CHECK 2>/dev/null || true)"
+  if [[ "$window_manager_state" == *"window id #"* ]]; then
+    window_manager_ready=1
+    break
+  fi
+  sleep 0.1
+done
+[[ -n "$window_manager_ready" ]] || fail "Openbox did not become ready within five seconds"
 
 APPIMAGE_EXTRACT_AND_RUN=1 \
   CY_KAF_DESKTOP_TEST_CONFIG="$config_path" \
@@ -93,18 +152,21 @@ for _ in $(seq 1 60); do
   if ! process_is_running "$shell_pid"; then
     fail "desktop shell exited before its window became ready"
   fi
-  window_ids="$(
-    xdotool search --onlyvisible --pid "$shell_pid" --name '^Cy KafClient$' \
-      2>/dev/null || true
-  )"
-  window_count="$(
-    printf '%s\n' "$window_ids" |
-      sed '/^[[:space:]]*$/d' |
-      wc -l |
-      tr -d '[:space:]'
-  )"
-  if [[ "$window_count" == "1" ]]; then
-    window_id="$(printf '%s\n' "$window_ids" | sed -n '1p')"
+  matching_window_ids=()
+  matching_desktop_pids=()
+  while IFS= read -r candidate_window_id; do
+    [[ -n "$candidate_window_id" ]] || continue
+    candidate_desktop_pid="$(
+      xdotool getwindowpid "$candidate_window_id" 2>/dev/null || true
+    )"
+    if process_is_descendant "$candidate_desktop_pid" "$shell_pid"; then
+      matching_window_ids+=("$candidate_window_id")
+      matching_desktop_pids+=("$candidate_desktop_pid")
+    fi
+  done < <(xdotool search --onlyvisible --name '^Cy KafClient$' 2>/dev/null || true)
+  if [[ "${#matching_window_ids[@]}" == "1" ]]; then
+    window_id="${matching_window_ids[0]}"
+    desktop_pid="${matching_desktop_pids[0]}"
     break
   fi
   sleep 0.5
@@ -119,14 +181,14 @@ for _ in $(seq 1 60); do
     if [[ "$child_command" == *"/cy-kaf-client --desktop --no-browser "* ]]; then
       matching_sidecars+=("$child_pid")
     fi
-  done < <(pgrep -P "$shell_pid" || true)
+  done < <(pgrep -P "$desktop_pid" || true)
   if [[ "${#matching_sidecars[@]}" == "1" ]]; then
     sidecar_pid="${matching_sidecars[0]}"
     break
   fi
   sleep 0.5
 done
-[[ -n "$sidecar_pid" ]] || fail "bundled Go sidecar is not a unique direct shell child"
+[[ -n "$sidecar_pid" ]] || fail "bundled Go sidecar is not a unique direct desktop child"
 
 listen_output=""
 listen_count="0"
@@ -159,20 +221,33 @@ xdotool windowclose "$window_id" || fail "could not close the native window"
 closed=""
 for _ in $(seq 1 50); do
   shell_running=""
+  desktop_running=""
   sidecar_running=""
   port_listening=""
   process_is_running "$shell_pid" && shell_running=1
+  process_is_running "$desktop_pid" && desktop_running=1
   process_is_running "$sidecar_pid" && sidecar_running=1
   lsof -nP -iTCP:"$port" -sTCP:LISTEN >/dev/null 2>&1 && port_listening=1
-  if [[ -z "$shell_running" && -z "$sidecar_running" && -z "$port_listening" ]]; then
+  if [[
+    -z "$shell_running" &&
+    -z "$desktop_running" &&
+    -z "$sidecar_running" &&
+    -z "$port_listening"
+  ]]; then
     closed=1
     break
   fi
   sleep 0.1
 done
-[[ -n "$closed" ]] || fail "shell, sidecar, or loopback listener survived normal close"
+[[ -n "$closed" ]] || fail "launcher, desktop, sidecar, or loopback listener survived normal close"
 
 wait "$shell_pid"
 shell_pid=""
+desktop_pid=""
 sidecar_pid=""
+if process_is_running "$window_manager_pid"; then
+  kill -TERM "$window_manager_pid"
+fi
+wait "$window_manager_pid" 2>/dev/null || true
+window_manager_pid=""
 echo "DESKTOP LINUX SMOKE OK"

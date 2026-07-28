@@ -34,7 +34,7 @@ fn workflow_declares_all_six_native_desktop_targets() {
         "runner: ubuntu-24.04-arm",
         "target: aarch64-unknown-linux-gnu",
     ] {
-        assert!(workflow.contains(required), "missing {required}");
+        assert!(desktop_matrix.contains(required), "missing {required}");
     }
     assert_eq!(desktop_matrix.matches("          - runner:").count(), 6);
     assert_eq!(desktop_matrix.matches("            target:").count(), 6);
@@ -71,8 +71,13 @@ fn linux_packages_have_native_smoke_and_user_documentation() {
 
     assert!(workflow.contains("Smoke Linux AppImage"));
     assert!(workflow.contains("scripts/desktop-smoke-linux.sh"));
+    assert!(workflow.contains("openbox"));
     assert!(smoke.contains("APPIMAGE_EXTRACT_AND_RUN=1"));
     assert!(smoke.contains("--desktop --no-browser"));
+    assert!(smoke.contains("openbox --sm-disable"));
+    assert!(smoke.contains("xdotool getwindowpid"));
+    assert!(smoke.contains("process_is_descendant"));
+    assert!(!smoke.contains(r#"--pid "$shell_pid""#));
     assert!(readme.contains("linux-x86_64.AppImage"));
     assert!(readme.contains("linux-aarch64.AppImage"));
 }

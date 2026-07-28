@@ -27,8 +27,9 @@ Go sidecar；CLI 与 MCP server 复用同一套后端能力。
 | Linux ARM64 | 64-bit ARM Linux，Ubuntu 24.04 构建基线 | `Cy-KafClient_<版本>_linux-aarch64.AppImage` |
 
 发布包暂未进行代码签名，因此 macOS Gatekeeper 或 Windows SmartScreen
-可能显示安全提示。Linux AppImage 可能需要先执行 `chmod +x <文件名>`，并要求兼容的
-图形会话和 WebKitGTK 运行时。安装或运行前请用 Release 中的 `SHA256SUMS.txt`
+可能显示安全提示。Linux AppImage 可能需要先执行 `chmod +x <文件名>`，运行时需要
+FUSE 2、兼容的图形会话和 WebKitGTK；无法使用 FUSE 时可设置
+`APPIMAGE_EXTRACT_AND_RUN=1`。安装或运行前请用 Release 中的 `SHA256SUMS.txt`
 校验下载文件。
 
 如需从源码构建，请安装 Go 1.26、Node.js 22、pnpm 10.26.1、Rust 1.95.0 和
