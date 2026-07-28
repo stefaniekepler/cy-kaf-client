@@ -19,9 +19,9 @@ Go sidecar；CLI 与 MCP server 复用同一套后端能力。
 
 | 平台 | 支持范围 | 安装包 |
 | --- | --- | --- |
-| macOS Intel | macOS 13 及以上 | `macos-x86_64.dmg` |
-| macOS Apple Silicon | macOS 12 及以上 | `macos-aarch64.dmg` |
-| Windows x64 | Windows 10/11 | `windows-x86_64-setup.exe` |
+| macOS Intel | macOS 13 及以上 | `Cy-KafClient_<版本>_macos-x86_64.dmg` |
+| macOS Apple Silicon | macOS 12 及以上 | `Cy-KafClient_<版本>_macos-aarch64.dmg` |
+| Windows x64 | Windows 10/11 | `Cy-KafClient_<版本>_windows-x86_64-setup.exe` |
 
 安装包暂未进行 Apple 或 Microsoft 代码签名，因此 macOS Gatekeeper 或 Windows
 SmartScreen 可能显示安全提示。安装前请用 Release 中的 `SHA256SUMS.txt` 校验下载文件。

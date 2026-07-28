@@ -18,7 +18,11 @@ permissions:
 concurrency:
   group: >-
     ci-${{ github.workflow }}-${{
-      github.event_name == 'workflow_dispatch' && inputs.release_tag || github.ref
+      github.event_name == 'workflow_dispatch' &&
+      format('release-{0}', inputs.release_tag) ||
+      startsWith(github.ref, 'refs/tags/') &&
+      format('release-{0}', github.ref_name) ||
+      github.ref
     }}
   cancel-in-progress: >-
     ${{
@@ -29,7 +33,9 @@ concurrency:
 env:
   BUILD_REF: >-
     ${{
-      github.event_name == 'workflow_dispatch' && inputs.release_tag || github.ref
+      github.event_name == 'workflow_dispatch' &&
+      format('refs/tags/{0}', inputs.release_tag) ||
+      github.ref
     }}
   RELEASE_TAG: >-
     ${{
@@ -44,6 +50,7 @@ jobs:
       tag: ${{ steps.metadata.outputs.tag }}
       version: ${{ steps.metadata.outputs.version }}
       is_release: ${{ steps.metadata.outputs.is_release }}
+      commit: ${{ steps.source.outputs.commit }}
     steps:
       - uses: actions/checkout@v6
         with:
@@ -60,6 +67,10 @@ jobs:
             -tauri-config desktop/src-tauri/tauri.conf.json \
             -cargo-toml desktop/src-tauri/Cargo.toml \
             -github-output "${GITHUB_OUTPUT}"
+      - id: source
+        name: Resolve immutable source commit
+        shell: bash
+        run: echo "commit=$(git rev-parse HEAD)" >> "${GITHUB_OUTPUT}"
 
   backend:
     needs: [version-check]
@@ -67,7 +78,7 @@ jobs:
     steps:
       - uses: actions/checkout@v6
         with:
-          ref: ${{ env.BUILD_REF }}
+          ref: ${{ needs.version-check.outputs.commit }}
       - uses: actions/setup-go@v6
         with: {go-version: "1.26"}
       - uses: golangci/golangci-lint-action@v9
@@ -83,7 +94,7 @@ jobs:
     steps:
       - uses: actions/checkout@v6
         with:
-          ref: ${{ env.BUILD_REF }}
+          ref: ${{ needs.version-check.outputs.commit }}
       - uses: actions/setup-node@v6
         with: {node-version: "22"}
       - run: corepack enable && corepack prepare pnpm@10.26.1 --activate
@@ -98,7 +109,7 @@ jobs:
     steps:
       - uses: actions/checkout@v6
         with:
-          ref: ${{ env.BUILD_REF }}
+          ref: ${{ needs.version-check.outputs.commit }}
       - uses: actions/setup-go@v6
         with: {go-version: "1.26"}
       - run: make gen-go && git diff --exit-code -- internal/api/generated/
@@ -115,7 +126,7 @@ jobs:
     steps:
       - uses: actions/checkout@v6
         with:
-          ref: ${{ env.BUILD_REF }}
+          ref: ${{ needs.version-check.outputs.commit }}
       - uses: actions/setup-go@v6
         with: {go-version: "1.26"}
       - run: |
@@ -157,7 +168,7 @@ jobs:
     steps:
       - uses: actions/checkout@v6
         with:
-          ref: ${{ env.BUILD_REF }}
+          ref: ${{ needs.version-check.outputs.commit }}
       - uses: actions/setup-go@v6
         with:
           go-version: "1.26"
@@ -282,7 +293,20 @@ jobs:
     env:
       GH_TOKEN: ${{ github.token }}
       RELEASE_VERSION: ${{ needs.version-check.outputs.version }}
+      SOURCE_COMMIT: ${{ needs.version-check.outputs.commit }}
     steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: refs/tags/${{ needs.version-check.outputs.tag }}
+          fetch-depth: 1
+      - name: Verify release tag still identifies source commit
+        shell: bash
+        run: |
+          tag_commit="$(git rev-parse HEAD)"
+          if [ "${tag_commit}" != "${SOURCE_COMMIT}" ]; then
+            echo "release tag moved from ${SOURCE_COMMIT} to ${tag_commit}" >&2
+            exit 1
+          fi
       - uses: actions/download-artifact@v4
         with:
           pattern: release-*
@@ -316,15 +340,66 @@ jobs:
       - name: Publish GitHub Release
         shell: bash
         run: |
-          notes=$'These installers are unsigned.\n\nmacOS may require an explicit Gatekeeper approval, and Windows may show a SmartScreen warning. Verify downloads with SHA256SUMS.txt before installation.'
+          notice_end='<!-- cy-kaf-client-release-notice:end -->'
+          notice=$'<!-- cy-kaf-client-release-notice:start -->\nThese installers are unsigned. macOS may require an explicit Gatekeeper approval, and Windows may show a SmartScreen warning. Verify downloads with SHA256SUMS.txt before installation.\n\nCompatibility:\n- macOS Intel: macOS 13 or later\n- macOS Apple Silicon: macOS 12 or later\n- Windows x64: Windows 10 or 11\n<!-- cy-kaf-client-release-notice:end -->'
+          expected=(
+            "Cy-KafClient_${RELEASE_VERSION}_macos-x86_64.dmg"
+            "Cy-KafClient_${RELEASE_VERSION}_macos-aarch64.dmg"
+            "Cy-KafClient_${RELEASE_VERSION}_windows-x86_64-setup.exe"
+            "SHA256SUMS.txt"
+          )
           if gh release view "${RELEASE_TAG}" >/dev/null 2>&1; then
+            while IFS= read -r asset; do
+              keep=false
+              for expected_asset in "${expected[@]}"; do
+                if [ "${asset}" = "${expected_asset}" ]; then
+                  keep=true
+                  break
+                fi
+              done
+              if [ "${keep}" = false ]; then
+                gh release delete-asset "${RELEASE_TAG}" "${asset}" --yes
+              fi
+            done < <(gh release view "${RELEASE_TAG}" --json assets --jq '.assets[].name')
+            existing_body="$(gh release view "${RELEASE_TAG}" --json body --jq '.body')"
+            if [[ "${existing_body}" == *"${notice_end}"* ]]; then
+              generated_notes="${existing_body#*"${notice_end}"}"
+            else
+              generated_notes="${existing_body}"
+            fi
+            while [[ "${generated_notes}" == $'\n'* || "${generated_notes}" == $'\r'* ]]; do
+              generated_notes="${generated_notes:1}"
+            done
+            body="${notice}"
+            if [ -n "${generated_notes}" ]; then
+              body="${body}"$'\n\n'"${generated_notes}"
+            fi
             gh release upload "${RELEASE_TAG}" release-assets/* --clobber
+            gh release edit "${RELEASE_TAG}" \
+              --title "Cy-KafClient ${RELEASE_TAG}" \
+              --notes "${body}" \
+              --draft=false \
+              --prerelease=false
           else
             gh release create "${RELEASE_TAG}" release-assets/* \
               --verify-tag \
               --title "Cy-KafClient ${RELEASE_TAG}" \
               --generate-notes \
-              --notes "${notes}"
+              --notes "${notice}"
+          fi
+          actual="$(gh release view "${RELEASE_TAG}" --json assets --jq '.assets[].name' | sort)"
+          wanted="$(printf '%s\n' "${expected[@]}" | sort)"
+          if [ "${actual}" != "${wanted}" ]; then
+            echo "published release assets do not match expected set" >&2
+            diff <(printf '%s\n' "${wanted}") <(printf '%s\n' "${actual}") || true
+            exit 1
+          fi
+          release_state="$(gh release view "${RELEASE_TAG}" \
+            --json isDraft,isPrerelease \
+            --jq '[.isDraft, .isPrerelease] | @tsv')"
+          if [ "${release_state}" != $'false\tfalse' ]; then
+            echo "release is not a public final release: ${release_state}" >&2
+            exit 1
           fi
 
 # 说明：CI 的 build-matrix 用空 webui/static 出"无前端"工件做编译门禁；
