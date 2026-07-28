@@ -15,8 +15,19 @@ Go sidecar；CLI 与 MCP server 复用同一套后端能力。
 
 ## 快速开始
 
-当前仓库暂不提供正式签名的安装包。构建桌面应用需要 Go 1.26、Node.js 22、
-pnpm 10.26.1、Rust 1.95.0 和 Tauri CLI 2.11.4。
+从 [GitHub Releases](https://github.com/stefaniekepler/cy-kaf-client/releases) 下载对应安装包：
+
+| 平台 | 支持范围 | 安装包 |
+| --- | --- | --- |
+| macOS Intel | macOS 13 及以上 | `macos-x86_64.dmg` |
+| macOS Apple Silicon | macOS 12 及以上 | `macos-aarch64.dmg` |
+| Windows x64 | Windows 10/11 | `windows-x86_64-setup.exe` |
+
+安装包暂未进行 Apple 或 Microsoft 代码签名，因此 macOS Gatekeeper 或 Windows
+SmartScreen 可能显示安全提示。安装前请用 Release 中的 `SHA256SUMS.txt` 校验下载文件。
+
+如需从源码构建，请安装 Go 1.26、Node.js 22、pnpm 10.26.1、Rust 1.95.0 和
+Tauri CLI 2.11.4。
 
 macOS：
 
@@ -32,6 +43,9 @@ Windows x64：
 ```powershell
 make desktop-package RUST_TARGET=x86_64-pc-windows-msvc DESKTOP_BUNDLES=nsis
 ```
+
+维护者创建并推送与应用版本一致的 `vX.Y.Z` 标签后，CI 会在三个原生 runner
+完成构建、安装冒烟测试和 Release 发布。
 
 桌面客户端默认读取：
 
