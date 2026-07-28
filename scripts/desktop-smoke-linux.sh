@@ -11,7 +11,7 @@ if [[ "$(uname -s)" != "Linux" ]]; then
   exit 2
 fi
 
-for command_name in lsof openbox pgrep ps sed xdotool xprop; do
+for command_name in find lsof openbox pgrep ps sed xdotool xprop; do
   if ! command -v "$command_name" >/dev/null 2>&1; then
     echo "required command not found: $command_name" >&2
     exit 2
@@ -80,6 +80,12 @@ trap 'exit 130' INT
 trap 'exit 143' TERM
 
 fail() {
+  local diagnostic_line
+  local diagnostic_pid
+  local diagnostic_title
+  local diagnostic_window_id
+  local runtime_log
+
   echo "DESKTOP LINUX SMOKE FAILED: $1" >&2
   if [[ -s "$stdout_log" ]]; then
     echo "desktop stdout:" >&2
@@ -93,6 +99,30 @@ fail() {
     echo "window manager stderr:" >&2
     sed -n '1,120p' "$window_manager_stderr_log" >&2
   fi
+  echo "process diagnostics:" >&2
+  while IFS= read -r diagnostic_line; do
+    if [[ "$diagnostic_line" == *"cy-kaf-client"* ]]; then
+      printf '%s\n' "$diagnostic_line" >&2
+    fi
+  done < <(ps -eo pid=,ppid=,state=,comm=,args= 2>/dev/null || true)
+  echo "window diagnostics:" >&2
+  while IFS= read -r diagnostic_window_id; do
+    [[ -n "$diagnostic_window_id" ]] || continue
+    diagnostic_pid="$(
+      xdotool getwindowpid "$diagnostic_window_id" 2>/dev/null || true
+    )"
+    diagnostic_title="$(
+      xdotool getwindowname "$diagnostic_window_id" 2>/dev/null || true
+    )"
+    printf 'id=%s pid=%s title=%q\n' \
+      "$diagnostic_window_id" \
+      "$diagnostic_pid" \
+      "$diagnostic_title" >&2
+  done < <(xdotool search --onlyvisible --name '.*' 2>/dev/null || true)
+  while IFS= read -r runtime_log; do
+    echo "runtime log: $runtime_log" >&2
+    sed -n '1,120p' "$runtime_log" >&2
+  done < <(find "$smoke_directory" -type f -path '*/logs/*' 2>/dev/null || true)
   exit 1
 }
 
@@ -145,12 +175,15 @@ for _ in $(seq 1 60); do
         tr -d '[:space:]' ||
         true
     )"
-    if [[ "$candidate_sidecar_command" == *"/cy-kaf-client --desktop --no-browser"* ]] &&
+    if [[
+      "$candidate_sidecar_command" == *"--desktop"* &&
+      "$candidate_sidecar_command" == *"--no-browser"*
+    ]] &&
       process_is_running "$candidate_desktop_pid"; then
       matching_sidecar_pids+=("$candidate_sidecar_pid")
       matching_desktop_pids+=("$candidate_desktop_pid")
     fi
-  done < <(pgrep -f '/cy-kaf-client --desktop --no-browser' || true)
+  done < <(pgrep -f 'cy-kaf-client' || true)
   if [[ "${#matching_sidecar_pids[@]}" == "1" ]]; then
     sidecar_pid="${matching_sidecar_pids[0]}"
     desktop_pid="${matching_desktop_pids[0]}"
