@@ -104,9 +104,12 @@ func parseOptions(args []string) (options, error) {
 
 func targetForTriple(triple string) (target, error) {
 	targets := map[string]target{
-		"x86_64-apple-darwin":    {GOOS: "darwin", GOARCH: "amd64"},
-		"aarch64-apple-darwin":   {GOOS: "darwin", GOARCH: "arm64"},
-		"x86_64-pc-windows-msvc": {GOOS: "windows", GOARCH: "amd64", Ext: ".exe"},
+		"x86_64-apple-darwin":       {GOOS: "darwin", GOARCH: "amd64"},
+		"aarch64-apple-darwin":      {GOOS: "darwin", GOARCH: "arm64"},
+		"x86_64-pc-windows-msvc":    {GOOS: "windows", GOARCH: "amd64", Ext: ".exe"},
+		"aarch64-pc-windows-msvc":   {GOOS: "windows", GOARCH: "arm64", Ext: ".exe"},
+		"x86_64-unknown-linux-gnu":  {GOOS: "linux", GOARCH: "amd64"},
+		"aarch64-unknown-linux-gnu": {GOOS: "linux", GOARCH: "arm64"},
 	}
 	buildTarget, ok := targets[triple]
 	if !ok {

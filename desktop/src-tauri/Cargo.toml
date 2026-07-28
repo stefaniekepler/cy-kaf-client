@@ -1,6 +1,6 @@
 [package]
 name = "cy-kaf-client-desktop"
-version = "0.1.0"
+version = "0.1.1"
 description = "Native desktop shell for cy-kaf-client"
 authors = ["cy-kaf-client contributors"]
 license = "Apache-2.0"
