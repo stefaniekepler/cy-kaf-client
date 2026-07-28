@@ -1,0 +1,11 @@
+http:
+  routers:
+    kafkaui:
+      rule: "PathPrefix(`/kafbat-ui/`)"
+      entrypoints: web
+      service: kafbatui
+  services:
+    kafkaui:
+      loadBalancer:
+        servers:
+          - url: http://kafbat-ui:8080

@@ -1,0 +1,6 @@
+services:
+  kafka0:
+    environment:
+      KAFKA_AUTHORIZER_CLASS_NAME: 'org.apache.kafka.metadata.authorizer.StandardAuthorizer'
+      KAFKA_SUPER_USERS: 'User:ANONYMOUS'
+      KAFKA_ALLOW_EVERYONE_IF_NO_ACL_FOUND: 'true'

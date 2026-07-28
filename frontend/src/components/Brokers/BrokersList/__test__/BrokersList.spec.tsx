@@ -1,0 +1,277 @@
+import React from 'react';
+import { render, WithRoute } from 'lib/testHelpers';
+import { screen, waitFor } from '@testing-library/dom';
+import { clusterBrokerPath, clusterBrokersPath } from 'lib/paths';
+import BrokersList from 'components/Brokers/BrokersList/BrokersList';
+import userEvent from '@testing-library/user-event';
+import { useBrokers } from 'lib/hooks/api/brokers';
+import { useClusters, useClusterStats } from 'lib/hooks/api/clusters';
+import { brokersPayload } from 'lib/fixtures/brokers';
+import {
+  clusterStatsPayload,
+  onlineClusterPayload,
+} from 'lib/fixtures/clusters';
+
+const mockedUsedNavigate = jest.fn();
+
+jest.mock('react-router-dom', () => ({
+  ...jest.requireActual('react-router-dom'),
+  useNavigate: () => mockedUsedNavigate,
+}));
+
+jest.mock('lib/hooks/api/brokers', () => ({
+  useBrokers: jest.fn(),
+}));
+jest.mock('lib/hooks/api/clusters', () => ({
+  useClusterStats: jest.fn(),
+  useClusters: jest.fn(),
+}));
+
+describe('BrokersList Component', () => {
+  const clusterName = 'local';
+
+  const testInSyncReplicasCount = 798;
+  const testOutOfSyncReplicasCount = 1;
+
+  const renderComponent = () =>
+    render(
+      <WithRoute path={clusterBrokersPath()}>
+        <BrokersList />
+      </WithRoute>,
+      {
+        initialEntries: [clusterBrokersPath(clusterName)],
+      }
+    );
+
+  describe('BrokersList', () => {
+    describe('when the brokers are loaded', () => {
+      beforeEach(() => {
+        (useBrokers as jest.Mock).mockImplementation(() => ({
+          isLoading: false,
+          isRefetching: false,
+          isSuccess: true,
+          error: null,
+          data: brokersPayload,
+          refetch: jest.fn(),
+        }));
+        (useClusterStats as jest.Mock).mockImplementation(() => ({
+          isLoading: false,
+          isRefetching: false,
+          isSuccess: true,
+          error: null,
+          data: clusterStatsPayload,
+          refetch: jest.fn(),
+        }));
+        (useClusters as jest.Mock).mockImplementation(() => ({
+          isLoading: false,
+          isRefetching: false,
+          isSuccess: true,
+          error: null,
+          data: [onlineClusterPayload],
+          refetch: jest.fn(),
+        }));
+      });
+      it('renders', async () => {
+        renderComponent();
+        expect(screen.getByRole('table')).toBeInTheDocument();
+        expect(screen.getAllByRole('row').length).toEqual(3);
+      });
+      it('opens broker when row clicked', async () => {
+        renderComponent();
+        await userEvent.click(screen.getByRole('cell', { name: '100' }));
+
+        await waitFor(() =>
+          expect(mockedUsedNavigate).toBeCalledWith(
+            clusterBrokerPath(clusterName, '100')
+          )
+        );
+      });
+      it('shows warning when offlinePartitionCount > 0', async () => {
+        (useClusterStats as jest.Mock).mockImplementation(() => ({
+          isLoading: false,
+          isRefetching: false,
+          isSuccess: true,
+          error: null,
+          data: {
+            ...clusterStatsPayload,
+            offlinePartitionCount: 1345,
+          },
+          refetch: jest.fn(),
+        }));
+        renderComponent();
+        const onlineWidgets = screen.getAllByText(
+          clusterStatsPayload.onlinePartitionCount
+        );
+        onlineWidgets.forEach((widget) => {
+          expect(widget).toBeInTheDocument();
+          expect(widget).toHaveStyle({ color: '#E51A1A' });
+        });
+      });
+      it('shows right count when offlinePartitionCount > 0', async () => {
+        (useClusterStats as jest.Mock).mockImplementation(() => ({
+          isLoading: false,
+          isRefetching: false,
+          isSuccess: true,
+          error: null,
+          data: {
+            ...clusterStatsPayload,
+            inSyncReplicasCount: testInSyncReplicasCount,
+            outOfSyncReplicasCount: testOutOfSyncReplicasCount,
+          },
+          refetch: jest.fn(),
+        }));
+        renderComponent();
+        const onlineWidgetDef = screen.getByText(testInSyncReplicasCount);
+        const onlineWidget = screen.getByText(
+          `of ${testInSyncReplicasCount + testOutOfSyncReplicasCount}`
+        );
+        expect(onlineWidgetDef).toBeInTheDocument();
+        expect(onlineWidget).toBeInTheDocument();
+      });
+      it('shows right count when inSyncReplicasCount: undefined && outOfSyncReplicasCount: 1', async () => {
+        (useClusterStats as jest.Mock).mockImplementation(() => ({
+          isLoading: false,
+          isRefetching: false,
+          isSuccess: true,
+          error: null,
+          data: {
+            ...clusterStatsPayload,
+            inSyncReplicasCount: undefined,
+            outOfSyncReplicasCount: testOutOfSyncReplicasCount,
+          },
+          refetch: jest.fn(),
+        }));
+        renderComponent();
+        const onlineWidget = screen.getByText(
+          `of ${testOutOfSyncReplicasCount}`
+        );
+        expect(onlineWidget).toBeInTheDocument();
+      });
+      it(`shows right count when inSyncReplicasCount: ${testInSyncReplicasCount} outOfSyncReplicasCount: undefined`, async () => {
+        (useClusterStats as jest.Mock).mockImplementation(() => ({
+          isLoading: false,
+          isRefetching: false,
+          isSuccess: true,
+          error: null,
+          data: {
+            ...clusterStatsPayload,
+            inSyncReplicasCount: testInSyncReplicasCount,
+            outOfSyncReplicasCount: undefined,
+          },
+          refetch: jest.fn(),
+        }));
+        renderComponent();
+        const onlineWidgetDef = screen.getByText(testInSyncReplicasCount);
+        const onlineWidget = screen.getByText(`of ${testInSyncReplicasCount}`);
+        expect(onlineWidgetDef).toBeInTheDocument();
+        expect(onlineWidget).toBeInTheDocument();
+      });
+    });
+
+    describe('BrokersList', () => {
+      describe('when the brokers are loaded', () => {
+        const testActiveControllers = 0;
+        beforeEach(() => {
+          (useBrokers as jest.Mock).mockImplementation(() => ({
+            isLoading: false,
+            isRefetching: false,
+            isSuccess: true,
+            error: null,
+            data: brokersPayload,
+            refetch: jest.fn(),
+          }));
+          (useClusterStats as jest.Mock).mockImplementation(() => ({
+            isLoading: false,
+            isRefetching: false,
+            isSuccess: true,
+            error: null,
+            data: clusterStatsPayload,
+            refetch: jest.fn(),
+          }));
+          (useClusters as jest.Mock).mockImplementation(() => ({
+            isLoading: false,
+            isRefetching: false,
+            isSuccess: true,
+            error: null,
+            data: [onlineClusterPayload],
+            refetch: jest.fn(),
+          }));
+        });
+
+        it(`Indicates correct active cluster`, async () => {
+          renderComponent();
+          await waitFor(() =>
+            expect(screen.getByRole('tooltip')).toBeInTheDocument()
+          );
+        });
+        it(`Correct display even if there is no active cluster: ${testActiveControllers} `, async () => {
+          (useClusterStats as jest.Mock).mockImplementation(() => ({
+            isLoading: false,
+            isRefetching: false,
+            isSuccess: true,
+            error: null,
+            data: {
+              ...clusterStatsPayload,
+              activeControllers: testActiveControllers,
+            },
+            refetch: jest.fn(),
+          }));
+          renderComponent();
+          await waitFor(() =>
+            expect(screen.queryByRole('tooltip')).not.toBeInTheDocument()
+          );
+        });
+      });
+    });
+
+    describe('when diskUsage is empty', () => {
+      beforeEach(() => {
+        (useBrokers as jest.Mock).mockImplementation(() => ({
+          data: brokersPayload,
+          isSuccess: true,
+        }));
+        (useClusterStats as jest.Mock).mockImplementation(() => ({
+          data: { ...clusterStatsPayload, diskUsage: undefined },
+          isSuccess: true,
+        }));
+        (useClusters as jest.Mock).mockImplementation(() => ({
+          data: [onlineClusterPayload],
+          isSuccess: true,
+        }));
+      });
+
+      describe('when it has no brokers', () => {
+        beforeEach(() => {
+          (useBrokers as jest.Mock).mockImplementation(() => ({
+            data: [],
+            isSuccess: true,
+          }));
+        });
+
+        it('renders empty table', async () => {
+          renderComponent();
+          expect(screen.getByRole('table')).toBeInTheDocument();
+          expect(
+            screen.getByRole('row', { name: 'No clusters are online' })
+          ).toBeInTheDocument();
+        });
+      });
+
+      it('renders list of all brokers', async () => {
+        renderComponent();
+        expect(screen.getByRole('table')).toBeInTheDocument();
+        expect(screen.getAllByRole('row').length).toEqual(3);
+      });
+      it('opens broker when row clicked', async () => {
+        renderComponent();
+        await userEvent.click(screen.getByRole('cell', { name: '100' }));
+
+        await waitFor(() =>
+          expect(mockedUsedNavigate).toBeCalledWith(
+            clusterBrokerPath(clusterName, '100')
+          )
+        );
+      });
+    });
+  });
+});

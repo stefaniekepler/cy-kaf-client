@@ -1,0 +1,30 @@
+[package]
+name = "cy-kaf-client-desktop"
+version = "0.1.0"
+description = "Native desktop shell for cy-kaf-client"
+authors = ["cy-kaf-client contributors"]
+license = "Apache-2.0"
+edition = "2024"
+
+[lib]
+name = "cy_kaf_client_desktop_lib"
+crate-type = ["lib", "cdylib", "staticlib"]
+
+[build-dependencies]
+tauri-build = { version = "=2.6.3", features = [] }
+
+[dependencies]
+base64 = "=0.22.1"
+getrandom = "=0.4.3"
+open = "=5.4.0"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+tauri = { version = "=2.11.5", features = [] }
+tauri-plugin-shell = "=2.3.5"
+tauri-plugin-single-instance = "=2.4.3"
+thiserror = "2"
+tokio = { version = "1", features = ["macros", "sync", "time"] }
+url = "2"
+
+[dev-dependencies]
+tempfile = "3"

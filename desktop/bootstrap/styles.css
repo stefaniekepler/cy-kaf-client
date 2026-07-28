@@ -1,0 +1,158 @@
+:root {
+  color: #172033;
+  background: #f5f7fb;
+  font-family:
+    Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI",
+    sans-serif;
+  font-synthesis: none;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  min-width: 320px;
+  min-height: 100vh;
+  margin: 0;
+  background:
+    radial-gradient(circle at 16% 12%, rgb(34 107 255 / 12%), transparent 30%),
+    radial-gradient(circle at 88% 82%, rgb(30 193 172 / 10%), transparent 32%),
+    #f5f7fb;
+}
+
+main {
+  display: grid;
+  min-height: 100vh;
+  padding: 40px;
+  place-items: center;
+}
+
+.panel {
+  width: min(560px, 100%);
+  padding: 52px;
+  text-align: center;
+  background: rgb(255 255 255 / 92%);
+  border: 1px solid rgb(23 32 51 / 8%);
+  border-radius: 24px;
+  box-shadow: 0 24px 80px rgb(23 32 51 / 12%);
+}
+
+.eyebrow {
+  margin: 20px 0 8px;
+  color: #52607a;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.18em;
+}
+
+h1 {
+  margin: 0;
+  font-size: clamp(28px, 4vw, 42px);
+  letter-spacing: -0.03em;
+}
+
+.message {
+  min-height: 24px;
+  margin: 16px 0 0;
+  color: #65718a;
+  line-height: 1.6;
+}
+
+.spinner {
+  width: 42px;
+  height: 42px;
+  margin: 0 auto;
+  border: 4px solid rgb(34 107 255 / 16%);
+  border-top-color: #226bff;
+  border-radius: 50%;
+  animation: spin 900ms linear infinite;
+}
+
+.failure-mark {
+  display: grid;
+  width: 46px;
+  height: 46px;
+  margin: 0 auto;
+  color: #b42318;
+  font-size: 26px;
+  font-weight: 800;
+  background: #fee4e2;
+  border-radius: 50%;
+  place-items: center;
+}
+
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  justify-content: center;
+  margin-top: 30px;
+}
+
+button {
+  padding: 11px 18px;
+  color: #fff;
+  font: inherit;
+  font-weight: 650;
+  cursor: pointer;
+  background: #226bff;
+  border: 0;
+  border-radius: 10px;
+}
+
+button:hover {
+  background: #1558dc;
+}
+
+button:focus-visible {
+  outline: 3px solid rgb(34 107 255 / 30%);
+  outline-offset: 2px;
+}
+
+button.secondary {
+  color: #344054;
+  background: #e8ecf3;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    color: #eef2fa;
+    background: #101522;
+  }
+
+  body {
+    background:
+      radial-gradient(circle at 16% 12%, rgb(72 128 255 / 20%), transparent 30%),
+      radial-gradient(circle at 88% 82%, rgb(30 193 172 / 12%), transparent 32%),
+      #101522;
+  }
+
+  .panel {
+    background: rgb(25 32 48 / 94%);
+    border-color: rgb(255 255 255 / 8%);
+    box-shadow: 0 24px 80px rgb(0 0 0 / 32%);
+  }
+
+  .eyebrow,
+  .message {
+    color: #a9b4ca;
+  }
+
+  button.secondary {
+    color: #e5eaf4;
+    background: #333d52;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .spinner {
+    animation-duration: 2.4s;
+  }
+}

@@ -1,0 +1,120 @@
+import * as yup from 'yup';
+
+import { TOPIC_NAME_VALIDATION_PATTERN } from './constants';
+
+declare module 'yup' {
+  interface StringSchema<
+    TType extends yup.Maybe<string> = string | undefined,
+    TContext = yup.AnyObject,
+    TDefault = undefined,
+    TFlags extends yup.Flags = '',
+  > extends yup.Schema<TType, TContext, TDefault, TFlags> {
+    isJsonObject(message?: string): StringSchema<TType, TContext>;
+  }
+}
+
+export const isValidJsonObject = (value?: string) => {
+  try {
+    if (!value) return false;
+
+    const trimmedValue = value.trim();
+    if (
+      trimmedValue.indexOf('{') === 0 &&
+      trimmedValue.lastIndexOf('}') === trimmedValue.length - 1
+    ) {
+      JSON.parse(trimmedValue);
+      return true;
+    }
+  } catch {
+    // do nothing
+  }
+  return false;
+};
+
+function isJsonObject(this: yup.StringSchema, message?: string) {
+  return this.test(
+    'isJsonObject',
+    // eslint-disable-next-line no-template-curly-in-string
+    message || '${path} is not JSON object',
+    isValidJsonObject
+  );
+}
+/**
+ * due to yup rerunning all the object validiation during any render,
+ * it makes sense to cache the async results
+ * */
+export function cacheTest(
+  asyncValidate: (val?: string, ctx?: yup.AnyObject) => Promise<boolean>
+) {
+  let valid = false;
+  let closureValue = '';
+
+  return async (value?: string, ctx?: yup.AnyObject) => {
+    if (value !== closureValue) {
+      const response = await asyncValidate(value, ctx);
+      closureValue = value || '';
+      valid = response;
+      return response;
+    }
+    return valid;
+  };
+}
+
+yup.addMethod<yup.StringSchema>(yup.string, 'isJsonObject', isJsonObject);
+
+export const topicFormValidationSchema = yup.object().shape({
+  name: yup
+    .string()
+    .max(249)
+    .required('Topic Name is required')
+    .matches(
+      TOPIC_NAME_VALIDATION_PATTERN,
+      'Only alphanumeric, _, -, and . allowed'
+    ),
+  partitions: yup
+    .number()
+    .min(1, 'Number of Partitions must be greater than or equal to 1')
+    .max(2147483647)
+    .required()
+    .typeError('Number of Partitions is required and must be a number'),
+  replicationFactor: yup.string(),
+  minInSyncReplicas: yup.string(),
+  cleanupPolicy: yup.string().required(),
+  retentionMs: yup.string(),
+  retentionBytes: yup.number(),
+  maxMessageBytes: yup.string(),
+  customParams: yup.array().of(
+    yup
+      .object()
+      .shape({
+        name: yup.string().required('Custom parameter is required'),
+        value: yup.string().required('Value is required'),
+      })
+      .test(
+        'is_unique',
+        'Custom parameters must be unique',
+        (
+          value,
+          context: yup.TestContext<yup.AnyObject> & {
+            options: yup.ValidateOptions<yup.AnyObject> & { path?: string };
+          }
+        ) => {
+          const hasDuplicate =
+            context?.parent.filter(
+              (option: { name: string }) => option.name === value.name
+            ).length > 1;
+
+          if (hasDuplicate && 'path' in context.options) {
+            return context.createError({
+              message: 'Custom parameters must be unique',
+              path: `${context.options.path}.name`,
+            });
+          }
+
+          return true;
+        }
+      )
+  ),
+});
+
+export default yup;

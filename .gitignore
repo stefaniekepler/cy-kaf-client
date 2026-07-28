@@ -1,0 +1,22 @@
+.DS_Store
+*.log
+.superpowers/
+.worktrees/
+/docs/
+node_modules/
+webui/static/*
+!webui/static/.gitkeep
+coverage.out
+dist/
+desktop/src-tauri/target/
+desktop/src-tauri/gen/
+desktop/src-tauri/binaries/*
+!desktop/src-tauri/binaries/.gitkeep
+coverage.filtered
+coverage.core
+# e2e 生成产物（cucumber 报告/截图/trace + rerun 台账；历来每次跑完手工 rm，此处正式忽略）
+e2e/test-results/
+e2e/@rerun.txt
+
+# JetBrains IDE
+.idea/

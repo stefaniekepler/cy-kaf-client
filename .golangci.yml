@@ -1,0 +1,37 @@
+version: "2"
+linters:
+  enable: [depguard, errcheck, govet, staticcheck, ineffassign, unused, misspell]
+  settings:
+    depguard:
+      rules:
+        domain-purity:
+          files: ["**/internal/domain/**", "!$test"]
+          allow:
+            - $gostd
+            - github.com/cy-kaf/cy-kaf-client/internal/domain
+        domain-test:
+          files: ["**/internal/domain/**/*_test.go"]
+          allow:
+            - $gostd
+            - github.com/cy-kaf/cy-kaf-client/internal/domain
+            - github.com/stretchr/testify
+        app-only-domain:
+          files: ["**/internal/app/**", "!$test"]
+          allow:
+            - $gostd
+            - github.com/cy-kaf/cy-kaf-client/internal/domain
+            - github.com/cy-kaf/cy-kaf-client/internal/app
+        app-test:
+          files: ["**/internal/app/**/*_test.go"]
+          allow:
+            - $gostd
+            - github.com/cy-kaf/cy-kaf-client/internal/domain
+            - github.com/cy-kaf/cy-kaf-client/internal/app
+            - github.com/stretchr/testify
+        api-no-infra:
+          files: ["**/internal/api/**"]
+          deny:
+            - pkg: github.com/cy-kaf/cy-kaf-client/internal/infra
+              desc: api 只调用 app；组装在 cmd
+issues:
+  exclude-files: [".*\\.gen\\.go$"]

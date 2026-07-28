@@ -1,0 +1,382 @@
+import {
+  consumerGroupsApiClient,
+  messagesApiClient as messagesApi,
+  messagesApiClient,
+  topicsApiClient as api,
+} from 'lib/api';
+import {
+  useMutation,
+  useQuery,
+  useQueryClient,
+  UseQueryOptions,
+  useSuspenseQuery,
+} from '@tanstack/react-query';
+import {
+  CreateTopicMessage,
+  GetTopicDetailsRequest,
+  GetTopicsRequest,
+  Topic,
+  TopicConfig,
+  TopicCreation,
+  TopicDetails,
+  TopicsResponse,
+  TopicUpdate,
+  GetTopicConnectorsRequest,
+  FullConnectorInfo,
+  ListTopicAclsRequest,
+  KafkaAcl,
+} from 'generated-sources';
+import {
+  apiFetch,
+  ServerResponse,
+  showServerError,
+  showSuccessAlert,
+} from 'lib/errorHandling';
+import { ClusterName } from 'lib/interfaces/cluster';
+import {
+  TopicFormData,
+  TopicFormDataRaw,
+  TopicFormFormattedParams,
+} from 'lib/interfaces/topic';
+
+export const topicKeys = {
+  all: (clusterName: ClusterName) =>
+    ['clusters', clusterName, 'topics'] as const,
+  list: (
+    clusterName: ClusterName,
+    filters: Omit<GetTopicsRequest, 'clusterName'>
+  ) => [...topicKeys.all(clusterName), filters] as const,
+  details: ({ clusterName, topicName }: GetTopicDetailsRequest) =>
+    [...topicKeys.all(clusterName), topicName] as const,
+  config: (props: GetTopicDetailsRequest) =>
+    [...topicKeys.details(props), 'config'] as const,
+  schema: (props: GetTopicDetailsRequest) =>
+    [...topicKeys.details(props), 'schema'] as const,
+  consumerGroups: (props: GetTopicDetailsRequest) =>
+    [...topicKeys.details(props), 'consumerGroups'] as const,
+  statistics: (props: GetTopicDetailsRequest) =>
+    [...topicKeys.details(props), 'statistics'] as const,
+  connectors: (props: GetTopicConnectorsRequest) =>
+    [...topicKeys.details(props), 'connectors'] as const,
+  acls: (props: ListTopicAclsRequest) =>
+    [...topicKeys.details(props), 'acls'] as const,
+};
+
+export function useTopics(props: GetTopicsRequest) {
+  const { clusterName, ...filters } = props;
+  return useQuery<TopicsResponse, ServerResponse>({
+    queryKey: topicKeys.list(clusterName, filters),
+    queryFn: () => apiFetch(() => api.getTopics(props)),
+    placeholderData: (previousData) => previousData,
+  });
+}
+export function useTopicDetails(
+  props: GetTopicDetailsRequest,
+  queryOptions?: Omit<
+    UseQueryOptions<TopicDetails, ServerResponse>,
+    'queryKey' | 'queryFn'
+  >
+) {
+  return useQuery<TopicDetails, ServerResponse>({
+    queryKey: topicKeys.details(props),
+    queryFn: () => apiFetch(() => api.getTopicDetails(props)),
+    ...queryOptions,
+  });
+}
+export function useTopicConfig(
+  props: GetTopicDetailsRequest,
+  queryOptions?: Omit<UseQueryOptions<TopicConfig[]>, 'queryKey' | 'queryFn'>
+) {
+  return useSuspenseQuery<TopicConfig[]>({
+    queryKey: topicKeys.config(props),
+    queryFn: () => api.getTopicConfigs(props),
+    ...queryOptions,
+  });
+}
+export function useTopicConsumerGroups(props: GetTopicDetailsRequest) {
+  return useSuspenseQuery({
+    queryKey: topicKeys.consumerGroups(props),
+    queryFn: () => consumerGroupsApiClient.getTopicConsumerGroups(props),
+  });
+}
+
+export function useTopicConnectors(
+  props: GetTopicConnectorsRequest,
+  queryOptions?: Omit<
+    UseQueryOptions<FullConnectorInfo[]>,
+    'queryKey' | 'queryFn'
+  >
+) {
+  return useSuspenseQuery<FullConnectorInfo[]>({
+    queryKey: topicKeys.connectors(props),
+    queryFn: () => api.getTopicConnectors(props),
+    ...queryOptions,
+  });
+}
+
+export function useTopicAcls(
+  props: ListTopicAclsRequest,
+  queryOptions?: Omit<UseQueryOptions<KafkaAcl[]>, 'queryKey' | 'queryFn'>
+) {
+  return useQuery({
+    queryFn: () => api.listTopicAcls(props),
+    queryKey: topicKeys.acls(props),
+    ...queryOptions,
+  });
+}
+
+const topicReducer = (
+  result: TopicFormFormattedParams,
+  customParam: TopicConfig
+) => {
+  return {
+    ...result,
+    [customParam.name]: customParam.value,
+  };
+};
+const formatTopicCreation = (form: TopicFormData): TopicCreation => {
+  const {
+    name,
+    partitions,
+    replicationFactor,
+    cleanupPolicy,
+    retentionMs,
+    maxMessageBytes,
+    minInSyncReplicas,
+    customParams,
+  } = form;
+
+  const configs = {
+    'cleanup.policy': cleanupPolicy,
+    'retention.ms': retentionMs.toString(),
+    'max.message.bytes': maxMessageBytes.toString(),
+    'min.insync.replicas': minInSyncReplicas.toString(),
+    ...Object.values(customParams || {}).reduce(topicReducer, {}),
+  };
+
+  const cleanConfigs = () => {
+    return Object.fromEntries(
+      Object.entries(configs).filter(([, val]) => val !== '')
+    );
+  };
+
+  const topicsvalue = {
+    name,
+    partitions,
+    configs: cleanConfigs(),
+  };
+
+  return replicationFactor.toString() !== ''
+    ? {
+        ...topicsvalue,
+        replicationFactor,
+      }
+    : topicsvalue;
+};
+
+export function useCreateTopicMutation(clusterName: ClusterName) {
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: (data: TopicFormData) =>
+      api.createTopic({
+        clusterName,
+        topicCreation: formatTopicCreation(data),
+      }),
+    onSuccess: () => {
+      client.invalidateQueries({ queryKey: topicKeys.all(clusterName) });
+    },
+  });
+}
+
+// this will change later when we validate the request before
+export function useCreateTopic(clusterName: ClusterName) {
+  const mutate = useCreateTopicMutation(clusterName);
+
+  return {
+    createResource: async (param: TopicFormData) => {
+      return mutate.mutateAsync(param);
+    },
+    ...mutate,
+  };
+}
+
+const formatTopicUpdate = (form: TopicFormDataRaw): TopicUpdate => {
+  const {
+    cleanupPolicy,
+    retentionBytes,
+    retentionMs,
+    maxMessageBytes,
+    minInSyncReplicas,
+    customParams,
+  } = form;
+
+  return {
+    configs: {
+      ...Object.values(customParams || {}).reduce(topicReducer, {}),
+      'cleanup.policy': cleanupPolicy,
+      'retention.ms': retentionMs,
+      'retention.bytes': retentionBytes,
+      'max.message.bytes': maxMessageBytes,
+      'min.insync.replicas': minInSyncReplicas,
+    },
+  };
+};
+
+export function useUpdateTopic(props: GetTopicDetailsRequest) {
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: (data: TopicFormDataRaw) => {
+      return api.updateTopic({
+        ...props,
+        topicUpdate: formatTopicUpdate(data),
+      });
+    },
+    onSuccess: () => {
+      showSuccessAlert({
+        message: `Topic successfully updated.`,
+      });
+      client.invalidateQueries({ queryKey: topicKeys.all(props.clusterName) });
+    },
+  });
+}
+export function useIncreaseTopicPartitionsCount(props: GetTopicDetailsRequest) {
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: (totalPartitionsCount: number) =>
+      api.increaseTopicPartitions({
+        ...props,
+        partitionsIncrease: { totalPartitionsCount },
+      }),
+    onSuccess: () => {
+      showSuccessAlert({
+        message: `Number of partitions successfully increased`,
+      });
+      client.invalidateQueries({ queryKey: topicKeys.all(props.clusterName) });
+    },
+  });
+}
+export function useUpdateTopicReplicationFactor(props: GetTopicDetailsRequest) {
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: (totalReplicationFactor: number) =>
+      api.changeReplicationFactor({
+        ...props,
+        replicationFactorChange: { totalReplicationFactor },
+      }),
+    onSuccess: () => {
+      showSuccessAlert({
+        message: `Replication factor successfully updated`,
+      });
+      client.invalidateQueries({ queryKey: topicKeys.all(props.clusterName) });
+    },
+  });
+}
+export function useDeleteTopic(clusterName: ClusterName) {
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: (topicName: Topic['name']) =>
+      api.deleteTopic({ clusterName, topicName }),
+    onSuccess: (_, topicName) => {
+      showSuccessAlert({
+        message: `Topic ${topicName} successfully deleted!`,
+      });
+      client.invalidateQueries({ queryKey: topicKeys.all(clusterName) });
+    },
+  });
+}
+
+export function useClearTopicMessages(
+  clusterName: ClusterName,
+  partitions?: number[]
+) {
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: async (topicName: Topic['name']) => {
+      await messagesApiClient.deleteTopicMessages({
+        clusterName,
+        partitions,
+        topicName,
+      });
+      return topicName;
+    },
+    onSuccess: (topicName) => {
+      showSuccessAlert({
+        id: `message-${topicName}-${clusterName}-${partitions}`,
+        message: `${topicName} messages have been successfully cleared!`,
+      });
+      client.invalidateQueries({ queryKey: topicKeys.all(clusterName) });
+    },
+  });
+}
+
+export function useRecreateTopic(props: GetTopicDetailsRequest) {
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: () => api.recreateTopic(props),
+    onSuccess: () => {
+      showSuccessAlert({
+        message: `Topic ${props.topicName} successfully recreated!`,
+      });
+      client.invalidateQueries({ queryKey: topicKeys.all(props.clusterName) });
+    },
+  });
+}
+
+export function useSendMessage(props: GetTopicDetailsRequest) {
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: (message: CreateTopicMessage) =>
+      messagesApi.sendTopicMessages({ ...props, createTopicMessage: message }),
+    onSuccess: () => {
+      showSuccessAlert({
+        message: `Message successfully sent`,
+      });
+      client.invalidateQueries({ queryKey: topicKeys.all(props.clusterName) });
+    },
+    onError: (e) => {
+      showServerError(e as unknown as Response);
+    },
+  });
+}
+
+// Statistics
+export function useTopicAnalysis(
+  props: GetTopicDetailsRequest,
+  enabled = true
+) {
+  const queryResult = useQuery({
+    queryKey: topicKeys.statistics(props),
+    queryFn: () => api.getTopicAnalysis(props),
+    enabled,
+    refetchInterval: 1000,
+    throwOnError: true,
+    retry: false,
+    meta: {
+      suppressGlobalErrorStatuses: [404],
+    },
+  });
+
+  return queryResult;
+}
+export function useAnalyzeTopic(props: GetTopicDetailsRequest) {
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: () => api.analyzeTopic(props),
+    onSuccess: () => {
+      client.invalidateQueries({ queryKey: topicKeys.statistics(props) });
+    },
+  });
+}
+
+export function useCancelTopicAnalysis(props: GetTopicDetailsRequest) {
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: () => api.cancelTopicAnalysis(props),
+    onSuccess: () => {
+      showSuccessAlert({
+        message: `Topic analysis canceled`,
+      });
+      client.invalidateQueries({ queryKey: topicKeys.statistics(props) });
+    },
+  });
+}

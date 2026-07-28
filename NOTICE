@@ -1,0 +1,10 @@
+cy-kaf-client
+Copyright 2026 cy-kaf-client contributors
+
+This product contains code derived from kafbat/kafka-ui version v1.5.0
+(https://github.com/kafbat/kafka-ui, commit afc9c918e13c4422268a3a5b7933c7b448746c82),
+licensed under the Apache License, Version 2.0.
+Copyright the Kafbat project contributors and the original Provectus kafka-ui authors.
+
+Modifications: rebranding of product name and logos; frontend build wiring
+(contract path, generation scripts); backend re-implemented in Go.

@@ -1,0 +1,341 @@
+import React from 'react';
+import Filters, {
+  FiltersProps,
+} from 'components/Topics/Topic/Messages/Filters/Filters';
+import { render, WithRoute } from 'lib/testHelpers';
+import { act, screen, within } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
+import { clusterTopicPath } from 'lib/paths';
+import { useTopicDetails } from 'lib/hooks/api/topics';
+import { externalTopicPayload } from 'lib/fixtures/topics';
+import { useSerdes } from 'lib/hooks/api/topicMessages';
+import { serdesPayload } from 'lib/fixtures/topicMessages';
+import { PollingMode } from 'generated-sources';
+import { ModeOptions } from 'lib/hooks/filterUtils';
+import { MessagesFilterKeysTypes } from 'lib/types';
+import { MessagesFilterKeys } from 'lib/constants';
+import { useMessagesFilters } from 'lib/hooks/useMessagesFilters';
+import { useMessageFiltersStore } from 'lib/hooks/useMessageFiltersStore';
+
+const closeIconMock = 'closeIconMock';
+const filtersSideBarMock = 'filtersSideBarMock';
+const filterMetricsMock = 'filterMetricsMock';
+
+jest.mock('lib/hooks/api/topics', () => ({
+  useTopicDetails: jest.fn(),
+}));
+
+jest.mock('lib/hooks/api/topicMessages', () => ({
+  useSerdes: jest.fn(),
+}));
+
+jest.mock('components/common/Icons/CloseIcon', () => () => (
+  <div>{closeIconMock}</div>
+));
+
+jest.mock(
+  'components/Topics/Topic/Messages/Filters/FiltersSideBar',
+  () => () => <div>{filtersSideBarMock}</div>
+);
+
+jest.mock(
+  'components/Topics/Topic/Messages/Filters/FiltersMetrics',
+  () => () => <div>{filterMetricsMock}</div>
+);
+
+const clusterName = 'cluster-name';
+const topicName = 'topic-name';
+
+type TestFiltersProps = Omit<FiltersProps, 'filters'>;
+
+const FiltersWithState: React.FC<TestFiltersProps> = (props) => {
+  const filters = useMessagesFilters(topicName);
+  return <Filters {...props} filters={filters} />;
+};
+
+const renderComponent = (
+  props?: Partial<TestFiltersProps>,
+  queryParams?: Partial<Record<MessagesFilterKeysTypes, string>>
+) => {
+  const urlParams = new URLSearchParams({ ...queryParams });
+
+  return render(
+    <WithRoute path={clusterTopicPath()}>
+      <FiltersWithState
+        isFetching={false}
+        abortFetchData={jest.fn()}
+        {...props}
+      />
+    </WithRoute>,
+    {
+      initialEntries: [
+        `${clusterTopicPath(clusterName, topicName)}?${urlParams.toString()}`,
+      ],
+    }
+  );
+};
+
+beforeEach(async () => {
+  (useTopicDetails as jest.Mock).mockImplementation(() => ({
+    data: externalTopicPayload,
+  }));
+  (useSerdes as jest.Mock).mockImplementation(() => ({
+    data: serdesPayload,
+  }));
+});
+
+afterEach(() => {
+  useMessageFiltersStore.getState().removeAll();
+});
+
+describe('Filters component', () => {
+  const getSeekTypeSelect = () => screen.getAllByRole('listbox')[0];
+  const getKeySerdeDropdown = () => screen.getAllByRole('listbox')[1];
+  const getValueSerdeDropdown = () => screen.getAllByRole('listbox')[2];
+
+  it('shows refresh button', () => {
+    renderComponent();
+    expect(screen.getByText('Refresh')).toBeInTheDocument();
+  });
+
+  it('keeps filters, refresh, active filter and search in the wrapping top toolbar', async () => {
+    const active = {
+      id: 'partition-one',
+      value: 'record.partition == 1',
+      filterCode: 'code',
+    };
+    useMessageFiltersStore.getState().save(active);
+    renderComponent({}, { [MessagesFilterKeys.activeFilterId]: active.id });
+
+    const toolbar = await screen.findByTestId('messages-toolbar');
+    expect(
+      within(toolbar).getByRole('button', { name: /add filters/i })
+    ).toBeInTheDocument();
+    expect(
+      within(toolbar).getByRole('button', { name: 'Refresh' })
+    ).toBeInTheDocument();
+    expect(
+      within(toolbar).getByTestId('activeSmartFilter')
+    ).toBeInTheDocument();
+    expect(within(toolbar).getByPlaceholderText('Search')).toBeInTheDocument();
+  });
+
+  it('bounds a long active filter label without changing toolbar control order', async () => {
+    const active = {
+      id: `persisted-${'unbroken'.repeat(40)}`,
+      value: 'record.partition == 1',
+      filterCode: 'code',
+    };
+    useMessageFiltersStore.getState().save(active);
+    renderComponent({}, { [MessagesFilterKeys.activeFilterId]: active.id });
+
+    const toolbar = await screen.findByTestId('messages-toolbar');
+    const activeFilter = within(toolbar).getByTestId('activeSmartFilter');
+    const toolbarControls = activeFilter.parentElement;
+    const label = within(activeFilter).getByText(active.id);
+    const addFilters = within(toolbar).getByRole('button', {
+      name: /add filters/i,
+    });
+    const refresh = within(toolbar).getByRole('button', { name: 'Refresh' });
+
+    expect(toolbarControls).toHaveStyleRule('min-width', '0');
+    expect(toolbarControls).toHaveStyleRule('max-width', '100%');
+    expect(activeFilter).toHaveStyleRule('min-width', '0');
+    expect(activeFilter).toHaveStyleRule('max-width', '100%');
+    expect(label).toHaveStyleRule('overflow', 'hidden');
+    expect(label).toHaveStyleRule('white-space', 'nowrap');
+    expect(label).toHaveStyleRule('text-overflow', 'ellipsis');
+    expect(addFilters.nextElementSibling).toBe(activeFilter);
+    expect(activeFilter.nextElementSibling).toBe(refresh);
+  });
+
+  it('exposes the full active filter name when its visual label is truncated', async () => {
+    const active = {
+      id: `persisted-${'accessible'.repeat(40)}`,
+      value: 'record.partition == 1',
+      filterCode: 'code',
+    };
+    useMessageFiltersStore.getState().save(active);
+    renderComponent({}, { [MessagesFilterKeys.activeFilterId]: active.id });
+
+    expect(await screen.findByTitle(active.id)).toHaveTextContent(active.id);
+  });
+
+  describe('Filter Input default elements', () => {
+    const inputValue = 'Hello World!';
+
+    const selectDropdownAndCheckInput = async (
+      value: string,
+      placeholder: string
+    ) => {
+      const seekTypeSelect = getSeekTypeSelect();
+      const option = screen.getAllByRole('option');
+
+      await userEvent.click(seekTypeSelect);
+
+      await userEvent.selectOptions(seekTypeSelect, [value]);
+
+      expect(option[0]).toHaveTextContent(value);
+      const timestampInput = screen.getByPlaceholderText(placeholder);
+      expect(timestampInput).toHaveValue('');
+
+      await userEvent.type(timestampInput, inputValue);
+
+      expect(timestampInput).toHaveValue(inputValue);
+    };
+
+    beforeEach(() => {
+      renderComponent();
+    });
+
+    it('search input and selectable mode', async () => {
+      const searchInput = screen.getByPlaceholderText('Search');
+      expect(searchInput).toHaveValue('');
+      await userEvent.type(searchInput, inputValue);
+      expect(searchInput).toHaveValue(inputValue);
+    });
+
+    it('offset input from offset option', async () => {
+      await selectDropdownAndCheckInput('From offset', 'Offset');
+    });
+
+    it('timestamp input since time', async () => {
+      await selectDropdownAndCheckInput('Since time', 'Select timestamp');
+    });
+
+    it('timestamp input since time', async () => {
+      await selectDropdownAndCheckInput('To time', 'Select timestamp');
+    });
+  });
+
+  describe('change from and to offset filter', () => {
+    const inputValue = 'Hello World!';
+
+    it('saves filter value', async () => {
+      await act(() => renderComponent());
+
+      const seekTypeSelect = getSeekTypeSelect();
+      const option = screen.getAllByRole('option');
+
+      await userEvent.click(seekTypeSelect);
+      await userEvent.selectOptions(seekTypeSelect, ['From offset']);
+
+      expect(option[0]).toHaveTextContent('From offset');
+      const timestampInput = screen.getByPlaceholderText('Offset');
+      expect(timestampInput).toHaveValue('');
+      await userEvent.type(timestampInput, inputValue);
+
+      expect(timestampInput).toHaveValue(inputValue);
+
+      await userEvent.click(seekTypeSelect);
+      await userEvent.selectOptions(seekTypeSelect, ['To offset']);
+
+      expect(timestampInput).toHaveValue(inputValue);
+    });
+  });
+
+  describe('checks the input values when data comes from the url', () => {
+    const renderAndCheckSelectType = (
+      mode: PollingMode,
+      { timestamp, offset }: { timestamp?: string; offset?: string }
+    ) => {
+      renderComponent(
+        {},
+        {
+          [MessagesFilterKeys.mode]: mode.toString(),
+          [MessagesFilterKeys.timestamp]: timestamp,
+          [MessagesFilterKeys.offset]: offset,
+        }
+      );
+      const item = ModeOptions.find((i) => i.value === mode);
+      expect(getSeekTypeSelect()).toHaveTextContent(item?.label || '');
+    };
+
+    describe('modes and the related inputs', () => {
+      it('should check the mode input value latest', () => {
+        renderAndCheckSelectType(PollingMode.LATEST, {});
+      });
+
+      it('should check the mode input value earliest', () => {
+        renderAndCheckSelectType(PollingMode.EARLIEST, {});
+      });
+
+      it('should check the mode input value tailest', () => {
+        renderAndCheckSelectType(PollingMode.TAILING, {});
+      });
+
+      it('should check the mode input value from offset', () => {
+        const offset = '2';
+        renderAndCheckSelectType(PollingMode.FROM_OFFSET, { offset });
+        expect(screen.getAllByRole('textbox')[0]).toHaveValue(offset);
+      });
+
+      it('should check the mode input value to offset', () => {
+        const offset = '2';
+        renderAndCheckSelectType(PollingMode.TO_OFFSET, { offset });
+        expect(screen.getAllByRole('textbox')[0]).toHaveValue(offset);
+      });
+
+      it('should check the mode input value to timestamp', () => {
+        const currentDate = new Date(1707940800000);
+        renderAndCheckSelectType(PollingMode.TO_TIMESTAMP, {
+          timestamp: currentDate.getTime().toString(),
+        });
+
+        // DatePicker uses format "MMM d, yyyy HH:mm" - verify timestamp input has a value
+        const timestampInput = screen.getByPlaceholderText('Select timestamp');
+        expect(timestampInput).not.toHaveValue('');
+      });
+
+      it('should check the mode input value from timestamp', () => {
+        const currentDate = new Date(1707940800000);
+        renderAndCheckSelectType(PollingMode.FROM_TIMESTAMP, {
+          timestamp: currentDate.getTime().toString(),
+        });
+
+        // DatePicker uses format "MMM d, yyyy HH:mm" - verify timestamp input has a value
+        const timestampInput = screen.getByPlaceholderText('Select timestamp');
+        expect(timestampInput).not.toHaveValue('');
+      });
+    });
+
+    it('should check the search value', () => {
+      const searchFilter = 'searchFilter';
+      renderComponent({}, { [MessagesFilterKeys.stringFilter]: searchFilter });
+      expect(screen.getByPlaceholderText('Search')).toHaveValue(searchFilter);
+    });
+
+    describe('Serde dropdown', () => {
+      beforeEach(async () => {
+        (useSerdes as jest.Mock).mockImplementation(() => ({
+          data: serdesPayload,
+        }));
+      });
+
+      it('should check the keySerde', () => {
+        if (!serdesPayload.key || !serdesPayload.key[0]) return;
+
+        renderComponent(
+          {},
+          { [MessagesFilterKeys.keySerde]: serdesPayload.key[0].name }
+        );
+        expect(getKeySerdeDropdown()).toHaveTextContent(
+          serdesPayload.key[0].name || ''
+        );
+      });
+
+      it('should check the valueSerde', () => {
+        if (!serdesPayload.value || !serdesPayload.value[0]) return;
+
+        renderComponent(
+          {},
+          { [MessagesFilterKeys.valueSerde]: serdesPayload.value[0].name }
+        );
+
+        expect(getValueSerdeDropdown()).toHaveTextContent(
+          serdesPayload.value[0].name || ''
+        );
+      });
+    });
+  });
+});

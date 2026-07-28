@@ -1,0 +1,195 @@
+import { consumerGroupsApiClient as api } from 'lib/api';
+import {
+  useMutation,
+  useQuery,
+  useQueryClient,
+  UseQueryOptions,
+} from '@tanstack/react-query';
+import { ClusterName } from 'lib/interfaces/cluster';
+import {
+  ConsumerGroup,
+  ConsumerGroupDetails,
+  ConsumerGroupLag,
+  ConsumerGroupOffsetsReset,
+  ConsumerGroupOrdering,
+  ConsumerGroupsLagResponse,
+  ConsumerGroupState,
+  ConsumerGroupsPageResponse,
+  SortOrder,
+} from 'generated-sources';
+import { apiFetch, ServerResponse, showSuccessAlert } from 'lib/errorHandling';
+import { useEffect, useRef } from 'react';
+
+export type ConsumerGroupID = ConsumerGroup['groupId'];
+
+type UseConsumerGroupsProps = {
+  clusterName: ClusterName;
+  orderBy?: ConsumerGroupOrdering;
+  sortOrder?: SortOrder;
+  page?: number;
+  perPage?: number;
+  search: string;
+  fts?: boolean;
+  state?: ConsumerGroupState[];
+};
+
+type UseConsumerGroupDetailsProps = {
+  clusterName: ClusterName;
+  consumerGroupID: ConsumerGroupID;
+};
+
+export function useConsumerGroups(
+  props: UseConsumerGroupsProps,
+  queryOptions?: Omit<
+    UseQueryOptions<ConsumerGroupsPageResponse, ServerResponse>,
+    'queryKey' | 'queryFn'
+  >
+) {
+  const { clusterName, ...rest } = props;
+  return useQuery({
+    queryKey: ['clusters', clusterName, 'consumerGroups', rest],
+    queryFn: () => apiFetch(() => api.getConsumerGroupsPage(props)),
+    placeholderData: (previousData) => previousData,
+    ...queryOptions,
+  });
+}
+
+export function useConsumerGroupDetails(
+  props: UseConsumerGroupDetailsProps,
+  queryOptions?: Omit<
+    UseQueryOptions<ConsumerGroupDetails, ServerResponse>,
+    'queryKey' | 'queryFn'
+  >
+) {
+  const { clusterName, consumerGroupID } = props;
+  return useQuery<ConsumerGroupDetails, ServerResponse>({
+    queryKey: ['clusters', clusterName, 'consumerGroups', consumerGroupID],
+    queryFn: () =>
+      apiFetch(() =>
+        api.getConsumerGroup({ clusterName, id: consumerGroupID })
+      ),
+    ...queryOptions,
+  });
+}
+
+export const useDeleteConsumerGroupMutation = ({
+  clusterName,
+  consumerGroupID,
+}: UseConsumerGroupDetailsProps) => {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: () =>
+      api.deleteConsumerGroup({ clusterName, id: consumerGroupID }),
+    onSuccess: () => {
+      showSuccessAlert({
+        message: `Consumer ${consumerGroupID} group deleted`,
+      });
+      queryClient.invalidateQueries({
+        queryKey: ['clusters', clusterName, 'consumerGroups'],
+      });
+    },
+  });
+};
+
+export const useResetConsumerGroupOffsetsMutation = ({
+  clusterName,
+  consumerGroupID,
+}: UseConsumerGroupDetailsProps) => {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (props: ConsumerGroupOffsetsReset) =>
+      api.resetConsumerGroupOffsets({
+        clusterName,
+        id: consumerGroupID,
+        consumerGroupOffsetsReset: props,
+      }),
+    onSuccess: () => {
+      showSuccessAlert({
+        message: `Consumer ${consumerGroupID} group offsets reset`,
+      });
+      queryClient.invalidateQueries({
+        queryKey: ['clusters', clusterName, 'consumerGroups'],
+      });
+    },
+  });
+};
+
+export const useDeleteConsumerGroupOffsetsMutation = ({
+  clusterName,
+  consumerGroupID,
+}: UseConsumerGroupDetailsProps) => {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (topicName: string) =>
+      api.deleteConsumerGroupOffsets({
+        clusterName,
+        id: consumerGroupID,
+        topicName,
+      }),
+    onSuccess: (_, topicName) => {
+      showSuccessAlert({
+        message: `Consumer ${consumerGroupID} group offsets in topic ${topicName} deleted`,
+      });
+      queryClient.invalidateQueries({
+        queryKey: ['clusters', clusterName, 'consumerGroups'],
+      });
+    },
+  });
+};
+
+interface UseGetConsumerGroupsLagProps {
+  clusterName: string;
+  ids: string[];
+  pollingIntervalSec?: number;
+  includePartitions?: boolean;
+}
+
+export function useGetConsumerGroupsLag({
+  clusterName,
+  pollingIntervalSec = 0,
+  ids,
+  includePartitions,
+}: UseGetConsumerGroupsLagProps) {
+  const pollingEnabled = pollingIntervalSec > 0;
+  const lastUpdateRef = useRef<number | undefined>(undefined);
+
+  useEffect(() => {
+    lastUpdateRef.current = undefined;
+  }, [clusterName, ids.join(',')]);
+
+  return useQuery({
+    queryKey: [
+      'clusters',
+      clusterName,
+      'consumerGroupsLag',
+      ids,
+      includePartitions,
+    ],
+    queryFn: async () => {
+      const response = await api.getConsumerGroupsLag({
+        clusterName,
+        ids,
+        lastUpdate: lastUpdateRef.current,
+        includePartitions,
+      });
+
+      lastUpdateRef.current = response.updateTimestamp;
+      return response;
+    },
+    enabled: ids.length > 0,
+    refetchInterval: pollingEnabled ? pollingIntervalSec * 1000 : false,
+    refetchOnWindowFocus: false,
+
+    select: (data) => {
+      const filtered: Record<string, ConsumerGroupLag | undefined> = {};
+      ids.forEach((id) => {
+        filtered[id] = data.consumerGroups?.[id];
+      });
+
+      return {
+        updateTimestamp: data.updateTimestamp,
+        consumerGroups: filtered,
+      } satisfies ConsumerGroupsLagResponse;
+    },
+  });
+}
