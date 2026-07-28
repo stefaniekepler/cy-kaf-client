@@ -1,12 +1,73 @@
 name: ci
+
 on:
-  push: {branches: [main]}
+  push:
+    branches: [main]
+    tags: ["v*"]
   pull_request:
+  workflow_dispatch:
+    inputs:
+      release_tag:
+        description: Existing vX.Y.Z tag to build and publish
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: >-
+    ci-${{ github.workflow }}-${{
+      github.event_name == 'workflow_dispatch' && inputs.release_tag || github.ref
+    }}
+  cancel-in-progress: >-
+    ${{
+      github.event_name != 'workflow_dispatch' &&
+      !startsWith(github.ref, 'refs/tags/')
+    }}
+
+env:
+  BUILD_REF: >-
+    ${{
+      github.event_name == 'workflow_dispatch' && inputs.release_tag || github.ref
+    }}
+  RELEASE_TAG: >-
+    ${{
+      github.event_name == 'workflow_dispatch' && inputs.release_tag ||
+      startsWith(github.ref, 'refs/tags/') && github.ref_name || ''
+    }}
+
 jobs:
+  version-check:
+    runs-on: ubuntu-latest
+    outputs:
+      tag: ${{ steps.metadata.outputs.tag }}
+      version: ${{ steps.metadata.outputs.version }}
+      is_release: ${{ steps.metadata.outputs.is_release }}
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: ${{ env.BUILD_REF }}
+      - uses: actions/setup-go@v6
+        with:
+          go-version: "1.26"
+      - id: metadata
+        name: Validate release metadata
+        shell: bash
+        run: |
+          go run ./scripts/releasemeta \
+            -tag "${RELEASE_TAG}" \
+            -tauri-config desktop/src-tauri/tauri.conf.json \
+            -cargo-toml desktop/src-tauri/Cargo.toml \
+            -github-output "${GITHUB_OUTPUT}"
+
   backend:
+    needs: [version-check]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
+        with:
+          ref: ${{ env.BUILD_REF }}
       - uses: actions/setup-go@v6
         with: {go-version: "1.26"}
       - uses: golangci/golangci-lint-action@v9
@@ -14,11 +75,15 @@ jobs:
           version: v2.12.2
       - run: go test ./... -race -covermode=atomic -coverprofile=coverage.out -coverpkg=./internal/...
       - run: bash scripts/coverage-gate.sh coverage.out
+
   frontend:
+    needs: [version-check]
     runs-on: ubuntu-latest
     defaults: {run: {working-directory: frontend}}
     steps:
       - uses: actions/checkout@v6
+        with:
+          ref: ${{ env.BUILD_REF }}
       - uses: actions/setup-node@v6
         with: {node-version: "22"}
       - run: corepack enable && corepack prepare pnpm@10.26.1 --activate
@@ -26,15 +91,20 @@ jobs:
       - run: pnpm lint
       - run: pnpm exec jest --ci
       - run: pnpm build
+
   contract-check:
+    needs: [version-check]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
+        with:
+          ref: ${{ env.BUILD_REF }}
       - uses: actions/setup-go@v6
         with: {go-version: "1.26"}
       - run: make gen-go && git diff --exit-code -- internal/api/generated/
+
   build-matrix:
-    needs: [backend]
+    needs: [version-check, backend]
     runs-on: ubuntu-latest
     strategy:
       matrix:
@@ -44,6 +114,8 @@ jobs:
           - {goos: windows, goarch: amd64}
     steps:
       - uses: actions/checkout@v6
+        with:
+          ref: ${{ env.BUILD_REF }}
       - uses: actions/setup-go@v6
         with: {go-version: "1.26"}
       - run: |
@@ -55,8 +127,9 @@ jobs:
         with:
           name: cy-kaf-client-${{ matrix.goos }}-${{ matrix.goarch }}
           path: dist/
+
   desktop-package:
-    needs: [backend, frontend]
+    needs: [version-check, backend, frontend]
     runs-on: ${{ matrix.runner }}
     timeout-minutes: 60
     strategy:
@@ -67,16 +140,24 @@ jobs:
             target: x86_64-apple-darwin
             bundles: app,dmg
             smoke: macos
+            macos_min: "13.0"
+            asset: macos-x86_64
           - runner: macos-15
             target: aarch64-apple-darwin
             bundles: app,dmg
             smoke: macos
+            macos_min: "12.0"
+            asset: macos-aarch64
           - runner: windows-2025
             target: x86_64-pc-windows-msvc
             bundles: nsis
             smoke: windows
+            macos_min: ""
+            asset: windows-x86_64
     steps:
       - uses: actions/checkout@v6
+        with:
+          ref: ${{ env.BUILD_REF }}
       - uses: actions/setup-go@v6
         with:
           go-version: "1.26"
@@ -96,17 +177,36 @@ jobs:
       - run: make build-fe
       - name: Build target sidecar
         shell: bash
+        env:
+          MACOSX_DEPLOYMENT_TARGET: ${{ matrix.macos_min }}
         run: |
           build_time="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+          commit="$(git rev-parse HEAD)"
           go run ./scripts/build-desktop-sidecar \
             -target "${{ matrix.target }}" \
             -output-dir desktop/src-tauri/binaries \
-            -version "0.1.0-${GITHUB_RUN_NUMBER}" \
-            -commit "${GITHUB_SHA}" \
+            -version "${{ needs.version-check.outputs.version }}" \
+            -commit "${commit}" \
             -build-time "${build_time}"
-      - name: Build native packages
+      - name: Build macOS native package
+        if: matrix.smoke == 'macos'
         working-directory: desktop
-        run: cargo tauri build --target ${{ matrix.target }} --bundles ${{ matrix.bundles }}
+        shell: bash
+        env:
+          MACOSX_DEPLOYMENT_TARGET: ${{ matrix.macos_min }}
+        run: |
+          cargo tauri build \
+            --target "${{ matrix.target }}" \
+            --bundles "${{ matrix.bundles }}" \
+            --config '{"bundle":{"macOS":{"minimumSystemVersion":"${{ matrix.macos_min }}"}}}'
+      - name: Build Windows native package
+        if: matrix.smoke == 'windows'
+        working-directory: desktop
+        shell: pwsh
+        run: >-
+          cargo tauri build
+          --target "${{ matrix.target }}"
+          --bundles "${{ matrix.bundles }}"
       - name: Smoke macOS desktop executable
         if: matrix.smoke == 'macos'
         shell: bash
@@ -128,24 +228,107 @@ jobs:
           & ./scripts/desktop-smoke.ps1 `
             -Installer $Installers[0].FullName `
             -InstallDir $InstallDir
-      - name: Upload macOS packages
+      - name: Normalize macOS release asset
         if: matrix.smoke == 'macos'
-        uses: actions/upload-artifact@v4
-        with:
-          name: cy-kaf-client-${{ matrix.target }}
-          path: |
-            desktop/src-tauri/target/${{ matrix.target }}/release/bundle/macos/*.app
-            desktop/src-tauri/target/${{ matrix.target }}/release/bundle/dmg/*.dmg
-          if-no-files-found: error
-      - name: Upload Windows package
+        shell: bash
+        run: |
+          installer_dir="desktop/src-tauri/target/${{ matrix.target }}/release/bundle/dmg"
+          installer_count="$(find "${installer_dir}" -maxdepth 1 -type f -name '*.dmg' | wc -l | tr -d ' ')"
+          if [ "${installer_count}" -ne 1 ]; then
+            echo "expected exactly one DMG installer, found ${installer_count}" >&2
+            exit 1
+          fi
+          installer="$(find "${installer_dir}" -maxdepth 1 -type f -name '*.dmg' -print -quit)"
+          mkdir -p release-assets
+          cp "${installer}" \
+            "release-assets/Cy-KafClient_${{ needs.version-check.outputs.version }}_${{ matrix.asset }}.dmg"
+      - name: Normalize Windows release asset
         if: matrix.smoke == 'windows'
+        shell: pwsh
+        run: |
+          $Installers = @(
+            Get-ChildItem `
+              "desktop/src-tauri/target/${{ matrix.target }}/release/bundle/nsis/*.exe"
+          )
+          if ($Installers.Count -ne 1) {
+            throw "expected exactly one NSIS installer"
+          }
+          New-Item -ItemType Directory -Force "release-assets" | Out-Null
+          Copy-Item `
+            $Installers[0].FullName `
+            "release-assets/Cy-KafClient_${{ needs.version-check.outputs.version }}_${{ matrix.asset }}-setup.exe"
+      - name: Upload normalized release asset
         uses: actions/upload-artifact@v4
         with:
-          name: cy-kaf-client-${{ matrix.target }}
-          path: desktop/src-tauri/target/${{ matrix.target }}/release/bundle/nsis/*.exe
+          name: release-${{ matrix.asset }}
+          path: release-assets/*
           if-no-files-found: error
+
+  release:
+    if: >-
+      ${{
+        (github.event_name == 'push' || github.event_name == 'workflow_dispatch') &&
+        needs.version-check.outputs.is_release == 'true'
+      }}
+    needs:
+      - version-check
+      - backend
+      - frontend
+      - contract-check
+      - desktop-package
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    env:
+      GH_TOKEN: ${{ github.token }}
+      RELEASE_VERSION: ${{ needs.version-check.outputs.version }}
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: release-*
+          path: release-assets
+          merge-multiple: true
+      - name: Verify release assets and create checksums
+        shell: bash
+        run: |
+          expected=(
+            "Cy-KafClient_${RELEASE_VERSION}_macos-x86_64.dmg"
+            "Cy-KafClient_${RELEASE_VERSION}_macos-aarch64.dmg"
+            "Cy-KafClient_${RELEASE_VERSION}_windows-x86_64-setup.exe"
+          )
+          actual_count="$(find release-assets -maxdepth 1 -type f | wc -l | tr -d ' ')"
+          if [ "${actual_count}" -ne "${#expected[@]}" ]; then
+            echo "expected ${#expected[@]} release assets, found ${actual_count}" >&2
+            find release-assets -maxdepth 1 -type f -print >&2
+            exit 1
+          fi
+          for package in "${expected[@]}"; do
+            if [ ! -f "release-assets/${package}" ]; then
+              echo "missing release asset: ${package}" >&2
+              exit 1
+            fi
+          done
+          (
+            cd release-assets
+            sha256sum "${expected[@]}" > SHA256SUMS.txt
+            sha256sum -c SHA256SUMS.txt
+          )
+      - name: Publish GitHub Release
+        shell: bash
+        run: |
+          notes=$'These installers are unsigned.\n\nmacOS may require an explicit Gatekeeper approval, and Windows may show a SmartScreen warning. Verify downloads with SHA256SUMS.txt before installation.'
+          if gh release view "${RELEASE_TAG}" >/dev/null 2>&1; then
+            gh release upload "${RELEASE_TAG}" release-assets/* --clobber
+          else
+            gh release create "${RELEASE_TAG}" release-assets/* \
+              --verify-tag \
+              --title "Cy-KafClient ${RELEASE_TAG}" \
+              --generate-notes \
+              --notes "${notes}"
+          fi
+
 # 说明：CI 的 build-matrix 用空 webui/static 出"无前端"工件做编译门禁；
-# 含前端的完整产物由本地/发布流程的 `make release-build` 产出（CD defer，规格 §1.3）。
+# 含前端的完整产物由 desktop-package 在原生 runner 上构建。
 # integration 与 e2e（make test-integration / make e2e-p1a）需本机 Docker/colima，
 # 刻意不进 CI；desktop-package 只用空 Kafka 配置验证三平台原生包与进程生命周期，
 # 不启动或查询 Kafka。
