@@ -106,6 +106,18 @@ func TestQueryFramerAcceptsExactFrameLimit(t *testing.T) {
 	}
 }
 
+func TestQueryFramerReadsTopLevelStringWithEscapes(t *testing.T) {
+	framer := newQueryFramer(strings.NewReader(`"left\\\"right"`), 64)
+
+	raw, done, err := framer.next()
+	if err != nil || done || string(raw) != `"left\\\"right"` {
+		t.Fatalf("top-level string = %q, done:%v err:%v", raw, done, err)
+	}
+	if _, done, err := framer.next(); !done || err != nil {
+		t.Fatalf("top-level string trailing state = done:%v err:%v", done, err)
+	}
+}
+
 func TestQueryFramerNonPositiveLimitReturnsBoundedError(t *testing.T) {
 	for _, limit := range []int{0, -1} {
 		t.Run(fmt.Sprint(limit), func(t *testing.T) {
@@ -115,6 +127,24 @@ func TestQueryFramerNonPositiveLimitReturnsBoundedError(t *testing.T) {
 				t.Fatalf("limit %d error = %v, want %v", limit, err, errKsqlFrameLimit)
 			}
 		})
+	}
+}
+
+func TestIsDecimalNumber(t *testing.T) {
+	tests := map[string]bool{
+		"":      false,
+		"+":     false,
+		"-":     false,
+		"0":     true,
+		"+42":   true,
+		"-42":   true,
+		"4.2":   false,
+		"12abc": false,
+	}
+	for value, want := range tests {
+		if got := isDecimalNumber(value); got != want {
+			t.Errorf("isDecimalNumber(%q) = %v, want %v", value, got, want)
+		}
 	}
 }
 
