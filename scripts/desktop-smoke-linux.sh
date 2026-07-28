@@ -11,7 +11,7 @@ if [[ "$(uname -s)" != "Linux" ]]; then
   exit 2
 fi
 
-for command_name in lsof openbox pgrep ps sed xdotool xprop; do
+for command_name in lsof openbox pgrep ps readlink sed xdotool xprop; do
   if ! command -v "$command_name" >/dev/null 2>&1; then
     echo "required command not found: $command_name" >&2
     exit 2
@@ -44,25 +44,6 @@ process_is_running() {
   local state
   state="$(ps -p "$target_pid" -o state= 2>/dev/null | tr -d '[:space:]' || true)"
   [[ -n "$state" && "$state" != Z* ]]
-}
-
-process_is_descendant() {
-  local candidate_pid="$1"
-  local ancestor_pid="$2"
-  local current_pid="$candidate_pid"
-  local parent_pid
-
-  while [[ "$current_pid" =~ ^[1-9][0-9]*$ ]]; do
-    if [[ "$current_pid" == "$ancestor_pid" ]]; then
-      return 0
-    fi
-    parent_pid="$(ps -p "$current_pid" -o ppid= 2>/dev/null | tr -d '[:space:]' || true)"
-    if [[ ! "$parent_pid" =~ ^[1-9][0-9]*$ || "$parent_pid" == "$current_pid" ]]; then
-      return 1
-    fi
-    current_pid="$parent_pid"
-  done
-  return 1
 }
 
 cleanup() {
@@ -159,7 +140,11 @@ for _ in $(seq 1 60); do
     candidate_desktop_pid="$(
       xdotool getwindowpid "$candidate_window_id" 2>/dev/null || true
     )"
-    if process_is_descendant "$candidate_desktop_pid" "$shell_pid"; then
+    candidate_desktop_executable="$(
+      readlink -f "/proc/${candidate_desktop_pid}/exe" 2>/dev/null || true
+    )"
+    if process_is_running "$candidate_desktop_pid" &&
+      [[ "$candidate_desktop_executable" == */cy-kaf-client-desktop ]]; then
       matching_window_ids+=("$candidate_window_id")
       matching_desktop_pids+=("$candidate_desktop_pid")
     fi

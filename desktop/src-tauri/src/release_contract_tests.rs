@@ -76,7 +76,9 @@ fn linux_packages_have_native_smoke_and_user_documentation() {
     assert!(smoke.contains("--desktop --no-browser"));
     assert!(smoke.contains("openbox --sm-disable"));
     assert!(smoke.contains("xdotool getwindowpid"));
-    assert!(smoke.contains("process_is_descendant"));
+    assert!(smoke.contains("candidate_desktop_executable"));
+    assert!(smoke.contains("*/cy-kaf-client-desktop"));
+    assert!(!smoke.contains("process_is_descendant"));
     assert!(!smoke.contains(r#"--pid "$shell_pid""#));
     assert!(readme.contains("linux-x86_64.AppImage"));
     assert!(readme.contains("linux-aarch64.AppImage"));
