@@ -444,3 +444,6 @@ mod display_name_tests {
         ));
     }
 }
+
+#[cfg(test)]
+mod release_contract_tests;

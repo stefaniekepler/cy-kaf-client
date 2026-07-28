@@ -1,6 +1,6 @@
 # cy-kaf-client
 
-`cy-kaf-client` 是面向 macOS 和 Windows 的本地 Kafka 客户端，可通过原生桌面窗口连接 Kafka、Schema Registry、Kafka Connect 和 ksqlDB，无需额外部署服务端。
+`cy-kaf-client` 是面向 macOS、Windows 和 Linux 的本地 Kafka 客户端，可通过原生桌面窗口连接 Kafka、Schema Registry、Kafka Connect 和 ksqlDB，无需额外部署服务端。
 
 项目由 React 前端、Go 后端和 Tauri v2 桌面宿主组成。桌面应用会在本机启动仅监听 loopback 的
 Go sidecar；CLI 与 MCP server 复用同一套后端能力。
@@ -22,9 +22,14 @@ Go sidecar；CLI 与 MCP server 复用同一套后端能力。
 | macOS Intel | macOS 13 及以上 | `Cy-KafClient_<版本>_macos-x86_64.dmg` |
 | macOS Apple Silicon | macOS 12 及以上 | `Cy-KafClient_<版本>_macos-aarch64.dmg` |
 | Windows x64 | Windows 10/11 | `Cy-KafClient_<版本>_windows-x86_64-setup.exe` |
+| Windows ARM64 | Windows 11 on ARM | `Cy-KafClient_<版本>_windows-aarch64-setup.exe` |
+| Linux x86_64 | 64-bit x86 Linux，Ubuntu 24.04 构建基线 | `Cy-KafClient_<版本>_linux-x86_64.AppImage` |
+| Linux ARM64 | 64-bit ARM Linux，Ubuntu 24.04 构建基线 | `Cy-KafClient_<版本>_linux-aarch64.AppImage` |
 
-安装包暂未进行 Apple 或 Microsoft 代码签名，因此 macOS Gatekeeper 或 Windows
-SmartScreen 可能显示安全提示。安装前请用 Release 中的 `SHA256SUMS.txt` 校验下载文件。
+发布包暂未进行代码签名，因此 macOS Gatekeeper 或 Windows SmartScreen
+可能显示安全提示。Linux AppImage 可能需要先执行 `chmod +x <文件名>`，并要求兼容的
+图形会话和 WebKitGTK 运行时。安装或运行前请用 Release 中的 `SHA256SUMS.txt`
+校验下载文件。
 
 如需从源码构建，请安装 Go 1.26、Node.js 22、pnpm 10.26.1、Rust 1.95.0 和
 Tauri CLI 2.11.4。
@@ -38,19 +43,30 @@ APPLE_SIGNING_IDENTITY=- make desktop-package \
   DESKTOP_BUNDLES=app,dmg
 ```
 
-Windows x64：
+Windows：
 
 ```powershell
 make desktop-package RUST_TARGET=x86_64-pc-windows-msvc DESKTOP_BUNDLES=nsis
+make desktop-package RUST_TARGET=aarch64-pc-windows-msvc DESKTOP_BUNDLES=nsis
 ```
 
-维护者创建并推送与应用版本一致的 `vX.Y.Z` 标签后，CI 会在三个原生 runner
+Linux：
+
+```bash
+make desktop-package \
+  RUST_TARGET="$(rustc --print host-tuple)" \
+  DESKTOP_BUNDLES=appimage
+```
+
+维护者创建并推送与应用版本一致的 `vX.Y.Z` 标签后，CI 会在六个原生 runner
 完成构建、安装冒烟测试和 Release 发布。
 
 桌面客户端默认读取：
 
 - macOS：`~/Library/Application Support/cy-kaf-client/config.yaml`
 - Windows：`%APPDATA%\cy-kaf-client\config.yaml`
+- Linux：`$XDG_CONFIG_HOME/cy-kaf-client/config.yaml`，未设置时使用
+  `~/.config/cy-kaf-client/config.yaml`
 
 也可以通过 CLI 启动：
 

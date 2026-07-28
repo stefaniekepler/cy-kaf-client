@@ -123,6 +123,9 @@ jobs:
           - {goos: darwin, goarch: amd64}
           - {goos: darwin, goarch: arm64}
           - {goos: windows, goarch: amd64}
+          - {goos: windows, goarch: arm64}
+          - {goos: linux, goarch: amd64}
+          - {goos: linux, goarch: arm64}
     steps:
       - uses: actions/checkout@v6
         with:
@@ -153,18 +156,42 @@ jobs:
             smoke: macos
             macos_min: "13.0"
             asset: macos-x86_64
+            file_arch: ""
           - runner: macos-15
             target: aarch64-apple-darwin
             bundles: app,dmg
             smoke: macos
             macos_min: "12.0"
             asset: macos-aarch64
+            file_arch: ""
           - runner: windows-2025
             target: x86_64-pc-windows-msvc
             bundles: nsis
             smoke: windows
             macos_min: ""
             asset: windows-x86_64
+            file_arch: ""
+          - runner: windows-11-arm
+            target: aarch64-pc-windows-msvc
+            bundles: nsis
+            smoke: windows
+            macos_min: ""
+            asset: windows-aarch64
+            file_arch: ""
+          - runner: ubuntu-24.04
+            target: x86_64-unknown-linux-gnu
+            bundles: appimage
+            smoke: linux
+            macos_min: ""
+            asset: linux-x86_64
+            file_arch: x86-64
+          - runner: ubuntu-24.04-arm
+            target: aarch64-unknown-linux-gnu
+            bundles: appimage
+            smoke: linux
+            macos_min: ""
+            asset: linux-aarch64
+            file_arch: ARM aarch64
     steps:
       - uses: actions/checkout@v6
         with:
@@ -176,6 +203,25 @@ jobs:
         with:
           node-version: "22"
       - run: corepack enable && corepack prepare pnpm@10.26.1 --activate
+      - name: Install Linux desktop dependencies
+        if: matrix.smoke == 'linux'
+        shell: bash
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            build-essential \
+            curl \
+            file \
+            libayatana-appindicator3-dev \
+            libssl-dev \
+            libwebkit2gtk-4.1-dev \
+            libxdo-dev \
+            librsvg2-dev \
+            lsof \
+            patchelf \
+            wget \
+            xdotool \
+            xvfb
       - uses: dtolnay/rust-toolchain@stable
         with:
           toolchain: 1.95.0
@@ -218,6 +264,14 @@ jobs:
           cargo tauri build
           --target "${{ matrix.target }}"
           --bundles "${{ matrix.bundles }}"
+      - name: Build Linux native package
+        if: matrix.smoke == 'linux'
+        working-directory: desktop
+        shell: bash
+        run: >-
+          cargo tauri build
+          --target "${{ matrix.target }}"
+          --bundles "${{ matrix.bundles }}"
       - name: Smoke macOS desktop executable
         if: matrix.smoke == 'macos'
         shell: bash
@@ -239,6 +293,24 @@ jobs:
           & ./scripts/desktop-smoke.ps1 `
             -Installer $Installers[0].FullName `
             -InstallDir $InstallDir
+      - name: Smoke Linux AppImage
+        if: matrix.smoke == 'linux'
+        shell: bash
+        run: |
+          appimage_dir="desktop/src-tauri/target/${{ matrix.target }}/release/bundle/appimage"
+          appimage_count="$(find "${appimage_dir}" -maxdepth 1 -type f -name '*.AppImage' | wc -l | tr -d ' ')"
+          if [ "${appimage_count}" -ne 1 ]; then
+            echo "expected exactly one AppImage, found ${appimage_count}" >&2
+            exit 1
+          fi
+          appimage="$(find "${appimage_dir}" -maxdepth 1 -type f -name '*.AppImage' -print -quit)"
+          chmod +x "${appimage}"
+          appimage_type="$(file -b "${appimage}")"
+          if [[ "${appimage_type}" != *"${{ matrix.file_arch }}"* ]]; then
+            echo "AppImage architecture mismatch: ${appimage_type}" >&2
+            exit 1
+          fi
+          xvfb-run -a bash scripts/desktop-smoke-linux.sh "${appimage}"
       - name: Normalize macOS release asset
         if: matrix.smoke == 'macos'
         shell: bash
@@ -268,6 +340,20 @@ jobs:
           Copy-Item `
             $Installers[0].FullName `
             "release-assets/Cy-KafClient_${{ needs.version-check.outputs.version }}_${{ matrix.asset }}-setup.exe"
+      - name: Normalize Linux release asset
+        if: matrix.smoke == 'linux'
+        shell: bash
+        run: |
+          appimage_dir="desktop/src-tauri/target/${{ matrix.target }}/release/bundle/appimage"
+          appimage_count="$(find "${appimage_dir}" -maxdepth 1 -type f -name '*.AppImage' | wc -l | tr -d ' ')"
+          if [ "${appimage_count}" -ne 1 ]; then
+            echo "expected exactly one AppImage, found ${appimage_count}" >&2
+            exit 1
+          fi
+          appimage="$(find "${appimage_dir}" -maxdepth 1 -type f -name '*.AppImage' -print -quit)"
+          mkdir -p release-assets
+          cp "${appimage}" \
+            "release-assets/Cy-KafClient_${{ needs.version-check.outputs.version }}_${{ matrix.asset }}.AppImage"
       - name: Upload normalized release asset
         uses: actions/upload-artifact@v4
         with:
@@ -319,6 +405,9 @@ jobs:
             "Cy-KafClient_${RELEASE_VERSION}_macos-x86_64.dmg"
             "Cy-KafClient_${RELEASE_VERSION}_macos-aarch64.dmg"
             "Cy-KafClient_${RELEASE_VERSION}_windows-x86_64-setup.exe"
+            "Cy-KafClient_${RELEASE_VERSION}_windows-aarch64-setup.exe"
+            "Cy-KafClient_${RELEASE_VERSION}_linux-x86_64.AppImage"
+            "Cy-KafClient_${RELEASE_VERSION}_linux-aarch64.AppImage"
           )
           actual_count="$(find release-assets -maxdepth 1 -type f | wc -l | tr -d ' ')"
           if [ "${actual_count}" -ne "${#expected[@]}" ]; then
@@ -341,11 +430,14 @@ jobs:
         shell: bash
         run: |
           notice_end='<!-- cy-kaf-client-release-notice:end -->'
-          notice=$'<!-- cy-kaf-client-release-notice:start -->\nThese installers are unsigned. macOS may require an explicit Gatekeeper approval, and Windows may show a SmartScreen warning. Verify downloads with SHA256SUMS.txt before installation.\n\nCompatibility:\n- macOS Intel: macOS 13 or later\n- macOS Apple Silicon: macOS 12 or later\n- Windows x64: Windows 10 or 11\n<!-- cy-kaf-client-release-notice:end -->'
+          notice=$'<!-- cy-kaf-client-release-notice:start -->\nThese packages are unsigned. macOS may require an explicit Gatekeeper approval, and Windows may show a SmartScreen warning. Verify downloads with SHA256SUMS.txt before installation.\n\nCompatibility:\n- macOS Intel: macOS 13 or later\n- macOS Apple Silicon: macOS 12 or later\n- Windows x64: Windows 10 or 11\n- Windows ARM64: Windows 11 on ARM\n- Linux x86_64: 64-bit x86 Linux (Ubuntu 24.04 build baseline)\n- Linux ARM64: 64-bit ARM Linux (Ubuntu 24.04 build baseline)\n\nLinux AppImages may require `chmod +x`. A compatible graphical session and WebKitGTK runtime are required.\n<!-- cy-kaf-client-release-notice:end -->'
           expected=(
             "Cy-KafClient_${RELEASE_VERSION}_macos-x86_64.dmg"
             "Cy-KafClient_${RELEASE_VERSION}_macos-aarch64.dmg"
             "Cy-KafClient_${RELEASE_VERSION}_windows-x86_64-setup.exe"
+            "Cy-KafClient_${RELEASE_VERSION}_windows-aarch64-setup.exe"
+            "Cy-KafClient_${RELEASE_VERSION}_linux-x86_64.AppImage"
+            "Cy-KafClient_${RELEASE_VERSION}_linux-aarch64.AppImage"
             "SHA256SUMS.txt"
           )
           if gh release view "${RELEASE_TAG}" >/dev/null 2>&1; then
