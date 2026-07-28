@@ -6,18 +6,20 @@ jobs:
   backend:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-go@v5
+      - uses: actions/checkout@v6
+      - uses: actions/setup-go@v6
         with: {go-version: "1.26"}
-      - uses: golangci/golangci-lint-action@v8
+      - uses: golangci/golangci-lint-action@v9
+        with:
+          version: v2.12.2
       - run: go test ./... -race -covermode=atomic -coverprofile=coverage.out -coverpkg=./internal/...
       - run: bash scripts/coverage-gate.sh coverage.out
   frontend:
     runs-on: ubuntu-latest
     defaults: {run: {working-directory: frontend}}
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v6
         with: {node-version: "22"}
       - run: corepack enable && corepack prepare pnpm@10.26.1 --activate
       - run: pnpm install --frozen-lockfile
@@ -27,8 +29,8 @@ jobs:
   contract-check:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-go@v5
+      - uses: actions/checkout@v6
+      - uses: actions/setup-go@v6
         with: {go-version: "1.26"}
       - run: make gen-go && git diff --exit-code -- internal/api/generated/
   build-matrix:
@@ -41,8 +43,8 @@ jobs:
           - {goos: darwin, goarch: arm64}
           - {goos: windows, goarch: amd64}
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-go@v5
+      - uses: actions/checkout@v6
+      - uses: actions/setup-go@v6
         with: {go-version: "1.26"}
       - run: |
           ext=""; [ "${{ matrix.goos }}" = windows ] && ext=".exe"
@@ -74,11 +76,11 @@ jobs:
             bundles: nsis
             smoke: windows
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-go@v5
+      - uses: actions/checkout@v6
+      - uses: actions/setup-go@v6
         with:
           go-version: "1.26"
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v6
         with:
           node-version: "22"
       - run: corepack enable && corepack prepare pnpm@10.26.1 --activate

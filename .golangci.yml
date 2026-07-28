@@ -1,6 +1,10 @@
 version: "2"
 linters:
   enable: [depguard, errcheck, govet, staticcheck, ineffassign, unused, misspell]
+  exclusions:
+    paths:
+      - ".*\\.gen\\.go$"
+      - "internal/infra/ksql/grammar/ksqlgrammar_.*\\.go$"
   settings:
     depguard:
       rules:
@@ -33,5 +37,3 @@ linters:
           deny:
             - pkg: github.com/cy-kaf/cy-kaf-client/internal/infra
               desc: api 只调用 app；组装在 cmd
-issues:
-  exclude-files: [".*\\.gen\\.go$"]

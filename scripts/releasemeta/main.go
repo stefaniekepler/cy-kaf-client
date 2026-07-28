@@ -121,7 +121,7 @@ func readTauriVersion(path string) (string, error) {
 		return "", fmt.Errorf("parse Tauri config: %w", err)
 	}
 	if config.Version == "" {
-		return "", errors.New("Tauri version is empty")
+		return "", errors.New("tauri version is empty")
 	}
 	return config.Version, nil
 }
@@ -131,7 +131,9 @@ func readCargoPackageVersion(path string) (string, error) {
 	if err != nil {
 		return "", fmt.Errorf("read Cargo manifest: %w", err)
 	}
-	defer file.Close()
+	defer func() {
+		_ = file.Close()
+	}()
 
 	scanner := bufio.NewScanner(file)
 	inPackage := false
@@ -154,7 +156,7 @@ func readCargoPackageVersion(path string) (string, error) {
 	if err := scanner.Err(); err != nil {
 		return "", fmt.Errorf("scan Cargo manifest: %w", err)
 	}
-	return "", errors.New("Cargo package version is missing")
+	return "", errors.New("cargo package version is missing")
 }
 
 func writeGitHubOutput(path string, got metadata) error {
@@ -162,8 +164,6 @@ func writeGitHubOutput(path string, got metadata) error {
 	if err != nil {
 		return fmt.Errorf("open GitHub output: %w", err)
 	}
-	defer file.Close()
-
 	_, err = fmt.Fprintf(
 		file,
 		"tag=%s\nversion=%s\nis_release=%s\n",
@@ -172,7 +172,11 @@ func writeGitHubOutput(path string, got metadata) error {
 		strconv.FormatBool(got.IsRelease),
 	)
 	if err != nil {
+		_ = file.Close()
 		return fmt.Errorf("write GitHub output: %w", err)
+	}
+	if err := file.Close(); err != nil {
+		return fmt.Errorf("close GitHub output: %w", err)
 	}
 	return nil
 }

@@ -56,13 +56,13 @@ func TestResolve(t *testing.T) {
 			name:       "rejects missing Tauri version",
 			tauri:      `{}`,
 			cargo:      "[package]\nversion = \"0.1.0\"\n",
-			wantErrSub: "Tauri version is empty",
+			wantErrSub: "tauri version is empty",
 		},
 		{
 			name:       "rejects missing Cargo package version",
 			tauri:      `{"version":"0.1.0"}`,
 			cargo:      "[dependencies]\nserde = \"1\"\n",
-			wantErrSub: "Cargo package version",
+			wantErrSub: "cargo package version",
 		},
 		{
 			name:       "rejects non-semantic application version",
