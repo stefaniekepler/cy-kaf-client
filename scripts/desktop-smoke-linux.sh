@@ -11,7 +11,7 @@ if [[ "$(uname -s)" != "Linux" ]]; then
   exit 2
 fi
 
-for command_name in lsof openbox pgrep ps readlink sed xdotool xprop; do
+for command_name in lsof openbox pgrep ps sed xdotool xprop; do
   if ! command -v "$command_name" >/dev/null 2>&1; then
     echo "required command not found: $command_name" >&2
     exit 2
@@ -131,49 +131,59 @@ shell_pid=$!
 
 for _ in $(seq 1 60); do
   if ! process_is_running "$shell_pid"; then
-    fail "desktop shell exited before its window became ready"
+    fail "desktop shell exited before its sidecar became ready"
   fi
-  matching_window_ids=()
+  matching_sidecar_pids=()
   matching_desktop_pids=()
-  while IFS= read -r candidate_window_id; do
-    [[ -n "$candidate_window_id" ]] || continue
+  while IFS= read -r candidate_sidecar_pid; do
+    [[ -n "$candidate_sidecar_pid" ]] || continue
+    candidate_sidecar_command="$(
+      ps -p "$candidate_sidecar_pid" -o command= 2>/dev/null || true
+    )"
     candidate_desktop_pid="$(
-      xdotool getwindowpid "$candidate_window_id" 2>/dev/null || true
+      ps -p "$candidate_sidecar_pid" -o ppid= 2>/dev/null |
+        tr -d '[:space:]' ||
+        true
     )"
-    candidate_desktop_executable="$(
-      readlink -f "/proc/${candidate_desktop_pid}/exe" 2>/dev/null || true
-    )"
-    if process_is_running "$candidate_desktop_pid" &&
-      [[ "$candidate_desktop_executable" == */cy-kaf-client-desktop ]]; then
-      matching_window_ids+=("$candidate_window_id")
+    if [[ "$candidate_sidecar_command" == *"/cy-kaf-client --desktop --no-browser"* ]] &&
+      process_is_running "$candidate_desktop_pid"; then
+      matching_sidecar_pids+=("$candidate_sidecar_pid")
       matching_desktop_pids+=("$candidate_desktop_pid")
     fi
-  done < <(xdotool search --onlyvisible --name '^Cy KafClient$' 2>/dev/null || true)
-  if [[ "${#matching_window_ids[@]}" == "1" ]]; then
-    window_id="${matching_window_ids[0]}"
+  done < <(pgrep -f '/cy-kaf-client --desktop --no-browser' || true)
+  if [[ "${#matching_sidecar_pids[@]}" == "1" ]]; then
+    sidecar_pid="${matching_sidecar_pids[0]}"
     desktop_pid="${matching_desktop_pids[0]}"
     break
   fi
   sleep 0.5
 done
-[[ -n "$window_id" ]] || fail "no unique visible Cy KafClient window within 30 seconds"
+[[ -n "$sidecar_pid" ]] || fail "bundled Go sidecar is not a unique direct desktop child"
 
 for _ in $(seq 1 60); do
-  matching_sidecars=()
-  while IFS= read -r child_pid; do
-    [[ -n "$child_pid" ]] || continue
-    child_command="$(ps -p "$child_pid" -o command= 2>/dev/null || true)"
-    if [[ "$child_command" == *"/cy-kaf-client --desktop --no-browser "* ]]; then
-      matching_sidecars+=("$child_pid")
+  matching_window_ids=()
+  while IFS= read -r candidate_window_id; do
+    [[ -n "$candidate_window_id" ]] || continue
+    candidate_window_pid="$(
+      xdotool getwindowpid "$candidate_window_id" 2>/dev/null || true
+    )"
+    candidate_window_name="$(
+      xdotool getwindowname "$candidate_window_id" 2>/dev/null || true
+    )"
+    if [[
+      "$candidate_window_pid" == "$desktop_pid" &&
+      "$candidate_window_name" == "Cy KafClient"
+    ]]; then
+      matching_window_ids+=("$candidate_window_id")
     fi
-  done < <(pgrep -P "$desktop_pid" || true)
-  if [[ "${#matching_sidecars[@]}" == "1" ]]; then
-    sidecar_pid="${matching_sidecars[0]}"
+  done < <(xdotool search --onlyvisible --pid "$desktop_pid" 2>/dev/null || true)
+  if [[ "${#matching_window_ids[@]}" == "1" ]]; then
+    window_id="${matching_window_ids[0]}"
     break
   fi
   sleep 0.5
 done
-[[ -n "$sidecar_pid" ]] || fail "bundled Go sidecar is not a unique direct desktop child"
+[[ -n "$window_id" ]] || fail "no unique visible Cy KafClient window within 30 seconds"
 
 listen_output=""
 listen_count="0"
