@@ -424,6 +424,18 @@ mod display_name_tests {
     }
 
     #[test]
+    fn windows_ci_installs_below_the_system_temp_directory() {
+        let workflow = include_str!("../../../.github/workflows/ci.yml");
+
+        assert!(workflow.contains(
+            r#"$InstallDir = Join-Path ([System.IO.Path]::GetTempPath()) ("cy-kaf-client-smoke-" + [System.Guid]::NewGuid())"#
+        ));
+        assert!(
+            !workflow.contains(r#"$InstallDir = Join-Path $env:RUNNER_TEMP "cy-kaf-client-smoke""#)
+        );
+    }
+
+    #[test]
     fn macos_smoke_uses_an_isolated_native_saved_state_home() {
         let smoke = include_str!("../../../scripts/desktop-smoke.sh");
 

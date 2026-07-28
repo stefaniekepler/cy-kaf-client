@@ -235,7 +235,7 @@ jobs:
           if ($Installers.Count -ne 1) {
             throw "expected exactly one NSIS installer"
           }
-          $InstallDir = Join-Path $env:RUNNER_TEMP "cy-kaf-client-smoke"
+          $InstallDir = Join-Path ([System.IO.Path]::GetTempPath()) ("cy-kaf-client-smoke-" + [System.Guid]::NewGuid())
           & ./scripts/desktop-smoke.ps1 `
             -Installer $Installers[0].FullName `
             -InstallDir $InstallDir
