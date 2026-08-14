@@ -170,7 +170,7 @@ describe('SettingsModal', () => {
     ).toBeVisible();
     expect(
       within(dialog).getAllByText('Available in the desktop app only.')
-    ).toHaveLength(3);
+    ).toHaveLength(2);
     expect(
       within(dialog).queryByRole('button', { name: /Configure|Copy|Open log/ })
     ).not.toBeInTheDocument();
@@ -891,8 +891,13 @@ describe('SettingsModal', () => {
         screen.queryByRole('button', { name: /export configuration/i })
       ).not.toBeInTheDocument();
       expect(
-        screen.getAllByText('Available in the desktop app only.').length
-      ).toBeGreaterThanOrEqual(3);
+        screen.getByRole('button', { name: /import configuration/i })
+      ).toBeInTheDocument();
+      expect(
+        screen.getByText(
+          'Export configuration is available in the desktop app only.'
+        )
+      ).toBeInTheDocument();
     });
   });
 });
