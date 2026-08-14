@@ -3,6 +3,7 @@ package cluster_test
 import (
 	"context"
 	"errors"
+	"fmt"
 	"sync"
 	"testing"
 	"time"
@@ -40,10 +41,13 @@ type stubConfigStore struct {
 	validation  cluster.ConfigValidation
 	validateErr error
 	saveErr     error
+	parsed      cluster.ConfigSnapshot
+	parseErr    error
 
-	mu         sync.Mutex
-	saveCalled bool
-	savedSnap  cluster.ConfigSnapshot
+	mu           sync.Mutex
+	saveCalled   bool
+	savedSnap    cluster.ConfigSnapshot
+	backupCalled bool
 }
 
 func (s *stubConfigStore) Current() (cluster.ConfigSnapshot, error) {
@@ -63,9 +67,19 @@ func (s *stubConfigStore) SaveRelatedFile(context.Context, string, []byte) (stri
 	return "", nil
 }
 func (s *stubConfigStore) Parse([]byte) (cluster.ConfigSnapshot, error) {
-	return cluster.ConfigSnapshot{}, nil
+	return s.parsed, s.parseErr
 }
-func (s *stubConfigStore) Backup() (string, error) { return "", nil }
+func (s *stubConfigStore) Backup() (string, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.backupCalled = true
+	return "config.yaml.bak", nil
+}
+func (s *stubConfigStore) sawBackup() bool {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.backupCalled
+}
 func (s *stubConfigStore) sawSave() bool {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -261,4 +275,46 @@ func TestReloaderApplyIsSerializedUnderConcurrency(t *testing.T) {
 	require.NoError(t, err)
 	require.Eventually(t, func() bool { _, ok := sc.Get(ctx, "keep"); return ok },
 		time.Second, 5*time.Millisecond)
+}
+
+// TestReloaderImportParsesBacksUpSavesAndReloads proves the happy path: the
+// imported bytes parse + validate, the existing file is backed up, the new
+// snapshot is persisted, and the resolver/cache are realigned without a
+// connectivity probe.
+func TestReloaderImportParsesBacksUpSavesAndReloads(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	res := appcluster.NewResolver([]cluster.Definition{{Name: "old", Conn: conn("old:9092")}})
+	life := &recordingLifecycle{}
+	sc := appcluster.NewStateCache(res, &fakeState{}, life, time.Hour)
+	sc.Start(ctx)
+	store := &stubConfigStore{parsed: cluster.ConfigSnapshot{
+		Raw:      map[string]any{"kafka": map[string]any{}},
+		Clusters: []cluster.Definition{{Name: "new", Conn: conn("new:9092")}},
+	}}
+	rl := appcluster.NewReloader(res, life, sc, store)
+
+	require.NoError(t, rl.Import(ctx, []byte("kafka:\n  clusters: []\n")))
+	require.True(t, store.sawBackup(), "import must back up the existing config")
+	require.True(t, store.sawSave(), "import must persist the new config")
+	_, err := res.Lookup("new")
+	require.NoError(t, err)
+	require.ElementsMatch(t, []string{"old"}, life.names(), "removed cluster connection must be invalidated")
+}
+
+// TestReloaderImportRejectsInvalidWithoutTouchingDisk proves a schema violation
+// aborts before backup or save.
+func TestReloaderImportRejectsInvalidWithoutTouchingDisk(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	res := appcluster.NewResolver(nil)
+	life := &recordingLifecycle{}
+	sc := appcluster.NewStateCache(res, &fakeState{}, life, time.Hour)
+	store := &stubConfigStore{parseErr: fmt.Errorf("%w: bad", cluster.ErrInvalidConfig)}
+	rl := appcluster.NewReloader(res, life, sc, store)
+
+	err := rl.Import(ctx, []byte("bad"))
+	require.ErrorIs(t, err, cluster.ErrInvalidConfig)
+	require.False(t, store.sawBackup())
+	require.False(t, store.sawSave())
 }

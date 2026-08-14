@@ -103,3 +103,33 @@ func changedOrRemoved(old, next []cluster.Definition) []string {
 	}
 	return stale
 }
+
+// Import applies a raw config document (imported file bytes) as the running
+// configuration: parse+schema-validate, back up the existing file, persist,
+// then swap defs/invalidate/reload exactly like Apply but WITHOUT the
+// connectivity probe (import only requires schema validity; unreachable
+// clusters surface as OFFLINE via the state cache). Schema violations abort
+// before any disk or runtime change. Serialized against Apply by applyMu.
+func (rl *Reloader) Import(ctx context.Context, content []byte) error {
+	rl.applyMu.Lock()
+	defer rl.applyMu.Unlock()
+
+	snap, err := rl.store.Parse(content)
+	if err != nil {
+		return err
+	}
+	if _, err := rl.store.Backup(); err != nil {
+		return fmt.Errorf("backup existing config: %w", err)
+	}
+	if err := rl.store.Save(ctx, snap); err != nil {
+		return fmt.Errorf("persist imported config: %w", err)
+	}
+
+	stale := changedOrRemoved(rl.res.Definitions(), snap.Clusters)
+	rl.res.Replace(snap.Clusters)
+	for _, name := range stale {
+		rl.lifecycle.Invalidate(name)
+	}
+	rl.states.Reload(ctx)
+	return nil
+}
