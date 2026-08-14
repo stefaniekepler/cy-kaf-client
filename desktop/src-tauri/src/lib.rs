@@ -3,6 +3,7 @@ pub mod lifecycle;
 pub mod logging;
 pub mod navigation;
 pub mod protocol;
+pub mod reveal;
 pub mod settings;
 pub mod shutdown;
 pub mod tauri_host;
@@ -32,6 +33,8 @@ const APP_DISPLAY_NAME: &str = "Cy KafClient";
 const TEST_CONFIG_ENV: &str = "CY_KAF_DESKTOP_TEST_CONFIG";
 const SUPERVISOR_POLL: Duration = Duration::from_millis(50);
 const OPEN_LOGS_ERROR_SCRIPT: &str = "window.dispatchEvent(new Event('cy-kaf-open-logs-error'))";
+const REVEAL_CONFIG_ERROR_SCRIPT: &str =
+    "window.dispatchEvent(new Event('cy-kaf-reveal-config-error'))";
 
 type SharedCommandSender = Arc<Mutex<Option<Sender<SupervisorCommand>>>>;
 
@@ -69,6 +72,10 @@ pub fn run() {
                 desktop_data_directory(&app.path().config_dir()?, test_config.as_deref());
             let settings_path = data_directory.join("desktop.json");
             let log_directory = data_directory.join("logs");
+            let config_path = match test_config.as_deref() {
+                Some(path) => path.to_path_buf(),
+                None => data_directory.join("config.yaml"),
+            };
 
             let (sender, receiver) = mpsc::channel();
             *setup_sender
@@ -83,6 +90,7 @@ pub fn run() {
             let navigation_sidecar = Arc::clone(&sidecar_origin);
             let navigation_sender = sender.clone();
             let navigation_logs = log_directory.clone();
+            let navigation_config = config_path.clone();
             let navigation_app_handle = app.handle().clone();
             let new_window_app = Arc::clone(&app_origin);
             let new_window_sidecar = Arc::clone(&sidecar_origin);
@@ -102,6 +110,7 @@ pub fn run() {
                             &navigation_sidecar,
                             &navigation_sender,
                             &navigation_logs,
+                            &navigation_config,
                             &navigation_app_handle,
                         )
                     })
@@ -166,6 +175,7 @@ fn handle_navigation(
     sidecar_origin: &SharedOrigin,
     sender: &Sender<SupervisorCommand>,
     log_directory: &std::path::Path,
+    config_path: &std::path::Path,
     app_handle: &tauri::AppHandle,
 ) -> bool {
     let app = match captured_app_origin(app_origin, url) {
@@ -180,7 +190,7 @@ fn handle_navigation(
         Navigation::Allow => true,
         Navigation::Action(action) => {
             if should_dispatch_action(action, sidecar.is_some())
-                && let Err(error) = dispatch_action(action, sender, log_directory)
+                && let Err(error) = dispatch_action(action, sender, log_directory, config_path)
             {
                 report_action_error(app_handle, error);
             }
@@ -231,10 +241,11 @@ fn is_bootstrap_url(url: &url::Url) -> bool {
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 enum ActionDispatchError {
     OpenLogs,
+    RevealConfig,
 }
 
 fn action_allowed_while_ready(action: DesktopAction) -> bool {
-    matches!(action, DesktopAction::OpenLogs)
+    matches!(action, DesktopAction::OpenLogs | DesktopAction::RevealConfig)
 }
 
 fn should_dispatch_action(action: DesktopAction, sidecar_ready: bool) -> bool {
@@ -245,20 +256,29 @@ fn dispatch_action(
     action: DesktopAction,
     sender: &Sender<SupervisorCommand>,
     log_directory: &std::path::Path,
+    config_path: &std::path::Path,
 ) -> Result<(), ActionDispatchError> {
-    dispatch_action_with_opener(action, sender, log_directory, |directory| {
-        open::that_detached(directory)
-    })
+    dispatch_action_with_opener(
+        action,
+        sender,
+        log_directory,
+        config_path,
+        |directory| open::that_detached(directory),
+        reveal::reveal_in_file_manager,
+    )
 }
 
-fn dispatch_action_with_opener<F>(
+fn dispatch_action_with_opener<F, G>(
     action: DesktopAction,
     sender: &Sender<SupervisorCommand>,
     log_directory: &std::path::Path,
+    config_path: &std::path::Path,
     open_logs: F,
+    reveal_config: G,
 ) -> Result<(), ActionDispatchError>
 where
     F: FnOnce(&std::path::Path) -> std::io::Result<()>,
+    G: FnOnce(&std::path::Path) -> std::io::Result<()>,
 {
     match action {
         DesktopAction::Retry => {
@@ -269,6 +289,9 @@ where
         }
         DesktopAction::OpenLogs => {
             open_logs(log_directory).map_err(|_| ActionDispatchError::OpenLogs)?;
+        }
+        DesktopAction::RevealConfig => {
+            reveal_config(config_path).map_err(|_| ActionDispatchError::RevealConfig)?;
         }
         DesktopAction::Quit => {
             let _ = sender.send(SupervisorCommand::StopAndExit);
@@ -288,6 +311,15 @@ fn report_action_error(app: &tauri::AppHandle, error: ActionDispatchError) {
                 eprintln!("open_logs_error_notification_failed");
             }
         }
+        ActionDispatchError::RevealConfig => {
+            let Some(window) = app.get_webview_window(MAIN_WINDOW) else {
+                eprintln!("reveal_config_error_notification_unavailable");
+                return;
+            };
+            if window.eval(REVEAL_CONFIG_ERROR_SCRIPT).is_err() {
+                eprintln!("reveal_config_error_notification_failed");
+            }
+        }
     }
 }
 
@@ -302,31 +334,44 @@ fn send_supervisor_command(shared: &SharedCommandSender, command: SupervisorComm
 #[cfg(test)]
 mod action_dispatch_tests {
     use super::{
-        ActionDispatchError, DesktopAction, OPEN_LOGS_ERROR_SCRIPT, SupervisorCommand,
-        dispatch_action_with_opener, should_dispatch_action,
+        ActionDispatchError, DesktopAction, OPEN_LOGS_ERROR_SCRIPT, REVEAL_CONFIG_ERROR_SCRIPT,
+        SupervisorCommand, dispatch_action_with_opener, should_dispatch_action,
     };
     use std::{cell::Cell, io, path::Path, sync::mpsc};
 
     #[test]
-    fn dispatches_all_actions_before_ready_and_only_open_logs_when_ready() {
+    fn dispatches_all_actions_before_ready_and_only_os_actions_when_ready() {
         for (sidecar_ready, action, expected) in [
             (false, DesktopAction::Retry, true),
             (false, DesktopAction::ReassignPort, true),
             (false, DesktopAction::OpenLogs, true),
+            (false, DesktopAction::RevealConfig, true),
             (false, DesktopAction::Quit, true),
             (true, DesktopAction::Retry, false),
             (true, DesktopAction::ReassignPort, false),
             (true, DesktopAction::OpenLogs, true),
+            (true, DesktopAction::RevealConfig, true),
             (true, DesktopAction::Quit, false),
         ] {
             let (sender, receiver) = mpsc::channel();
             let opened = Cell::new(false);
+            let revealed = Cell::new(false);
 
             if should_dispatch_action(action, sidecar_ready) {
-                dispatch_action_with_opener(action, &sender, Path::new("/synthetic/logs"), |_| {
-                    opened.set(true);
-                    Ok(())
-                })
+                dispatch_action_with_opener(
+                    action,
+                    &sender,
+                    Path::new("/synthetic/logs"),
+                    Path::new("/synthetic/config.yaml"),
+                    |_| {
+                        opened.set(true);
+                        Ok(())
+                    },
+                    |_| {
+                        revealed.set(true);
+                        Ok(())
+                    },
+                )
                 .expect("allowed action should dispatch");
             }
 
@@ -346,6 +391,7 @@ mod action_dispatch_tests {
                     assert_eq!(receiver.try_recv(), Ok(SupervisorCommand::StopAndExit));
                 }
                 DesktopAction::OpenLogs => assert_eq!(opened.get(), expected),
+                DesktopAction::RevealConfig => assert_eq!(revealed.get(), expected),
                 _ => assert!(receiver.try_recv().is_err()),
             }
         }
@@ -359,10 +405,28 @@ mod action_dispatch_tests {
             DesktopAction::OpenLogs,
             &sender,
             Path::new("/synthetic/logs"),
+            Path::new("/synthetic/config.yaml"),
             |_| Err(io::Error::other("test opener failure")),
+            |_| Ok(()),
         );
 
         assert_eq!(error, Err(ActionDispatchError::OpenLogs));
+    }
+
+    #[test]
+    fn returns_a_fixed_reveal_config_error_when_the_injected_revealer_fails() {
+        let (sender, _receiver) = mpsc::channel();
+
+        let error = dispatch_action_with_opener(
+            DesktopAction::RevealConfig,
+            &sender,
+            Path::new("/synthetic/logs"),
+            Path::new("/synthetic/config.yaml"),
+            |_| Ok(()),
+            |_| Err(io::Error::other("test reveal failure")),
+        );
+
+        assert_eq!(error, Err(ActionDispatchError::RevealConfig));
     }
 
     #[test]
@@ -373,6 +437,16 @@ mod action_dispatch_tests {
         );
         assert!(!OPEN_LOGS_ERROR_SCRIPT.contains("detail"));
         assert!(!OPEN_LOGS_ERROR_SCRIPT.contains("/synthetic/logs"));
+    }
+
+    #[test]
+    fn reveal_config_notification_has_an_exact_fixed_no_data_script() {
+        assert_eq!(
+            REVEAL_CONFIG_ERROR_SCRIPT,
+            "window.dispatchEvent(new Event('cy-kaf-reveal-config-error'))"
+        );
+        assert!(!REVEAL_CONFIG_ERROR_SCRIPT.contains("detail"));
+        assert!(!REVEAL_CONFIG_ERROR_SCRIPT.contains("/synthetic/config.yaml"));
     }
 }
 
