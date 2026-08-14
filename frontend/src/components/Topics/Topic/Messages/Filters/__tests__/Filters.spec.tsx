@@ -98,6 +98,11 @@ describe('Filters component', () => {
     expect(screen.getByText('Refresh')).toBeInTheDocument();
   });
 
+  it('shows refresh rate select next to refresh button', () => {
+    renderComponent();
+    expect(screen.getByText('Refresh rate: Off')).toBeInTheDocument();
+  });
+
   it('keeps filters, refresh, active filter and search in the wrapping top toolbar', async () => {
     const active = {
       id: 'partition-one',
