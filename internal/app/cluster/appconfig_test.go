@@ -35,6 +35,10 @@ func (f *fakeConfigStore) Validate(_ context.Context, snap cluster.ConfigSnapsho
 }
 
 func (f *fakeConfigStore) Save(context.Context, cluster.ConfigSnapshot) error { return nil }
+func (f *fakeConfigStore) Parse([]byte) (cluster.ConfigSnapshot, error) {
+	return f.current, f.currentErr
+}
+func (f *fakeConfigStore) Backup() (string, error) { return "", nil }
 func (f *fakeConfigStore) SaveRelatedFile(_ context.Context, name string, content []byte) (string, error) {
 	f.lastRelName, f.lastRelContent = name, content
 	return f.relatedLoc, f.relatedErr

@@ -5,6 +5,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -229,4 +230,26 @@ func TestStoreSaveRelatedFileRejectsPathTraversal(t *testing.T) {
 		_, err := store.SaveRelatedFile(context.Background(), name, []byte("x"))
 		require.Error(t, err, "must reject %q", name)
 	}
+}
+
+func TestStoreBackupCopiesWithTimestampedName(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "config.yaml")
+	require.NoError(t, os.WriteFile(path, []byte("old"), 0o600))
+	s := NewStore(path, nilProbe)
+
+	backup, err := s.Backup()
+	require.NoError(t, err)
+	require.True(t, strings.HasPrefix(backup, path+"."), "backup should be a sibling of config.yaml")
+	require.True(t, strings.HasSuffix(backup, ".bak"))
+	got, err := os.ReadFile(backup)
+	require.NoError(t, err)
+	require.Equal(t, "old", string(got))
+}
+
+func TestStoreBackupSkipsWhenNoFile(t *testing.T) {
+	s := NewStore(filepath.Join(t.TempDir(), "missing.yaml"), nilProbe)
+	backup, err := s.Backup()
+	require.NoError(t, err)
+	require.Empty(t, backup)
 }

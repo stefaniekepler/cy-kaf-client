@@ -322,3 +322,30 @@ func (c ClusterCfg) ToDomain() (cluster.Definition, error) {
 		PollingThrottleRate: c.PollingThrottleRate,
 	}, nil
 }
+
+// parseConfig decodes a raw config document into a ConfigSnapshot and
+// validates its schema (via App.validate). Every schema-level failure is
+// wrapped with cluster.ErrInvalidConfig so callers can distinguish a 400
+// (bad document) from a 500 (I/O or unexpected failure).
+func parseConfig(data []byte) (cluster.ConfigSnapshot, error) {
+	var tree map[string]any
+	if err := yaml.Unmarshal(data, &tree); err != nil {
+		return cluster.ConfigSnapshot{}, fmt.Errorf("%w: %v", cluster.ErrInvalidConfig, err)
+	}
+	var app App
+	if err := yaml.Unmarshal(data, &app); err != nil {
+		return cluster.ConfigSnapshot{}, fmt.Errorf("%w: %v", cluster.ErrInvalidConfig, err)
+	}
+	if err := app.validate(); err != nil {
+		return cluster.ConfigSnapshot{}, fmt.Errorf("%w: %v", cluster.ErrInvalidConfig, err)
+	}
+	defs := make([]cluster.Definition, 0, len(app.Kafka.Clusters))
+	for _, c := range app.Kafka.Clusters {
+		def, err := c.ToDomain()
+		if err != nil {
+			return cluster.ConfigSnapshot{}, fmt.Errorf("%w: %v", cluster.ErrInvalidConfig, err)
+		}
+		defs = append(defs, def)
+	}
+	return cluster.ConfigSnapshot{Raw: tree, Clusters: defs}, nil
+}

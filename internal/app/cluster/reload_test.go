@@ -62,6 +62,10 @@ func (s *stubConfigStore) Save(_ context.Context, snap cluster.ConfigSnapshot) e
 func (s *stubConfigStore) SaveRelatedFile(context.Context, string, []byte) (string, error) {
 	return "", nil
 }
+func (s *stubConfigStore) Parse([]byte) (cluster.ConfigSnapshot, error) {
+	return cluster.ConfigSnapshot{}, nil
+}
+func (s *stubConfigStore) Backup() (string, error) { return "", nil }
 func (s *stubConfigStore) sawSave() bool {
 	s.mu.Lock()
 	defer s.mu.Unlock()
