@@ -23,7 +23,7 @@ export const CollapseAllButton = styled.button`
 
   & svg {
     width: 10px;
-    height: 6px;
+    height: 12px;
     stroke: currentColor;
   }
 

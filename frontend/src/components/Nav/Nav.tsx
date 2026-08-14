@@ -31,11 +31,12 @@ const Nav: FC = () => {
             onClick={collapseAllClusters}
           >
             <svg
-              viewBox="0 0 10 6"
+              viewBox="0 0 10 12"
               xmlns="http://www.w3.org/2000/svg"
               aria-hidden="true"
             >
-              <path d="M8.99988 5L4.99988 1L0.999878 5" fill="none" />
+              <path d="M1.5 5L5 1.5L8.5 5" fill="none" />
+              <path d="M1.5 7L5 10.5L8.5 7" fill="none" />
             </svg>
           </S.CollapseAllButton>
         )}
