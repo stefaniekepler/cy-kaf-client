@@ -11,6 +11,7 @@ import {
   useDesktopMCPSettings,
   useUpdateDesktopMCPSettings,
 } from 'lib/hooks/api/desktopMcp';
+import { useImportConfig } from 'lib/hooks/api/appConfig';
 
 import * as S from './SettingsModal.styled';
 
@@ -61,6 +62,8 @@ const SettingsModal: React.FC<Props> = ({ isOpen, onClose, triggerRef }) => {
   const integrationsQuery = useDesktopMCPIntegrations(isOpen && available);
   const updateMutation = useUpdateDesktopMCPSettings();
   const configureMutation = useConfigureDesktopMCP();
+  const importMutation = useImportConfig();
+  const configFileInputRef = React.useRef<HTMLInputElement>(null);
 
   const [confirmingWrites, setConfirmingWrites] =
     React.useState<WriteConfirmationState>(false);
@@ -443,6 +446,58 @@ const SettingsModal: React.FC<Props> = ({ isOpen, onClose, triggerRef }) => {
                   onDissmiss={() => setError(null)}
                 />
               </S.Alerts>
+            )}
+          </S.Section>
+
+          <S.Section>
+            <S.SectionHeading>Configuration</S.SectionHeading>
+            {!available ? (
+              <S.Limitation>Available in the desktop app only.</S.Limitation>
+            ) : (
+              <>
+                <S.Actions>
+                  <Button
+                    buttonType="secondary"
+                    buttonSize="M"
+                    onClick={() =>
+                      window.location.assign('cy-kaf-action://reveal-config')
+                    }
+                  >
+                    Export configuration
+                  </Button>
+                  <Button
+                    buttonType="secondary"
+                    buttonSize="M"
+                    disabled={importMutation.isPending}
+                    inProgress={importMutation.isPending}
+                    onClick={() => configFileInputRef.current?.click()}
+                  >
+                    Import configuration
+                  </Button>
+                  <input
+                    ref={configFileInputRef}
+                    type="file"
+                    accept=".yaml,.yml"
+                    style={{ display: 'none' }}
+                    onChange={(e) => {
+                      const file = e.target.files?.[0];
+                      if (!file) return;
+                      const form = new FormData();
+                      form.append('file', file);
+                      importMutation.mutateAsync(form).catch(() => undefined);
+                    }}
+                  />
+                </S.Actions>
+                {importMutation.isError && (
+                  <S.Alerts>
+                    <Alert
+                      title="Import failed"
+                      type="error"
+                      message={safeMutationMessage(importMutation.error)}
+                    />
+                  </S.Alerts>
+                )}
+              </>
             )}
           </S.Section>
 

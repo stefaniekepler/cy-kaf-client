@@ -155,7 +155,7 @@ describe('SettingsModal', () => {
     );
   });
 
-  it('keeps both sections visible but makes desktop-only controls unavailable', () => {
+  it('keeps sections visible but makes desktop-only controls unavailable', () => {
     settingsState = { available: false };
 
     renderModal();
@@ -163,11 +163,14 @@ describe('SettingsModal', () => {
     const dialog = screen.getByRole('dialog', { name: 'Settings' });
     expect(within(dialog).getByRole('heading', { name: 'MCP' })).toBeVisible();
     expect(
+      within(dialog).getByRole('heading', { name: 'Configuration' })
+    ).toBeVisible();
+    expect(
       within(dialog).getByRole('heading', { name: 'Diagnostics' })
     ).toBeVisible();
     expect(
       within(dialog).getAllByText('Available in the desktop app only.')
-    ).toHaveLength(2);
+    ).toHaveLength(3);
     expect(
       within(dialog).queryByRole('button', { name: /Configure|Copy|Open log/ })
     ).not.toBeInTheDocument();
@@ -867,5 +870,29 @@ describe('SettingsModal', () => {
       screen.queryByText('Unable to open the log directory.')
     ).not.toBeInTheDocument();
     await waitFor(() => expect(settingsRefetch).toHaveBeenCalledTimes(2));
+  });
+
+  describe('Configuration', () => {
+    it('renders export and import buttons when available', () => {
+      renderModal();
+      expect(screen.getByText('Configuration')).toBeInTheDocument();
+      expect(
+        screen.getByRole('button', { name: /export configuration/i })
+      ).toBeInTheDocument();
+      expect(
+        screen.getByRole('button', { name: /import configuration/i })
+      ).toBeInTheDocument();
+    });
+
+    it('hides export button and shows limitation when unavailable', () => {
+      settingsState = { available: false };
+      renderModal();
+      expect(
+        screen.queryByRole('button', { name: /export configuration/i })
+      ).not.toBeInTheDocument();
+      expect(
+        screen.getAllByText('Available in the desktop app only.').length
+      ).toBeGreaterThanOrEqual(3);
+    });
   });
 });
