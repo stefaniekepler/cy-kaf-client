@@ -29,9 +29,9 @@ describe('Nav', () => {
     render(<Nav />);
   };
 
-  const getDashboard = () => screen.getByText('Dashboard');
+  const getHome = () => screen.getByRole('link', { name: 'Home' });
 
-  const getMenuItemsCount = () => screen.getAllByRole('menuitem').length;
+  const getMenuItemsCount = () => screen.queryAllByRole('menuitem').length;
 
   const clusterMenuStorageKey = (name: string) =>
     `${LOCAL_STORAGE_KEY_PREFIX}-clusterMenu-${name}-isOpen`;
@@ -42,15 +42,15 @@ describe('Nav', () => {
   it('renders loader', () => {
     renderComponent();
 
-    expect(getMenuItemsCount()).toEqual(1);
-    expect(getDashboard()).toBeInTheDocument();
+    expect(getMenuItemsCount()).toEqual(0);
+    expect(getHome()).toBeInTheDocument();
   });
 
   it('renders ClusterMenu', () => {
     renderComponent([onlineClusterPayload, offlineClusterPayload]);
-    expect(screen.getAllByRole('menu').length).toEqual(3);
-    expect(getMenuItemsCount()).toEqual(3);
-    expect(getDashboard()).toBeInTheDocument();
+    expect(screen.getAllByRole('menu').length).toEqual(2);
+    expect(getMenuItemsCount()).toEqual(2);
+    expect(getHome()).toBeInTheDocument();
     expect(screen.getByText(onlineClusterPayload.name)).toBeInTheDocument();
     expect(screen.getByText(offlineClusterPayload.name)).toBeInTheDocument();
   });
@@ -76,13 +76,13 @@ describe('Nav', () => {
       );
       renderComponent([onlineClusterPayload, offlineClusterPayload]);
 
-      // dashboard + 2 cluster tabs + 2 * 3 (Brokers/Topics/Consumers)
-      expect(getMenuItemsCount()).toEqual(9);
+      // 2 cluster tabs + 2 * 3 (Brokers/Topics/Consumers)
+      expect(getMenuItemsCount()).toEqual(8);
 
       await userEvent.click(getCollapseAllButton());
 
-      // dashboard + collapsed cluster tabs only
-      expect(getMenuItemsCount()).toEqual(3);
+      // collapsed cluster tabs only
+      expect(getMenuItemsCount()).toEqual(2);
       expect(
         localStorage.getItem(clusterMenuStorageKey(onlineClusterPayload.name))
       ).toEqual('false');

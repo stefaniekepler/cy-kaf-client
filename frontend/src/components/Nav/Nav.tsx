@@ -2,9 +2,9 @@ import React, { type FC } from 'react';
 import { useClusters } from 'lib/hooks/api/clusters';
 import useCurrentClusterName from 'lib/hooks/useCurrentClusterName';
 import { setLocalStorageValue } from 'lib/hooks/useLocalStorage';
+import HomeIcon from 'components/common/Icons/HomeIcon';
 
 import * as S from './Nav.styled';
-import MenuItem from './Menu/MenuItem';
 import ClusterMenu from './ClusterMenu/ClusterMenu';
 
 const Nav: FC = () => {
@@ -20,9 +20,10 @@ const Nav: FC = () => {
   return (
     <aside aria-label="Sidebar Menu">
       <S.SidebarHeader>
-        <S.List>
-          <MenuItem variant="primary" to="/" title="Dashboard" />
-        </S.List>
+        <S.HomeLink to="/" title="Home">
+          <HomeIcon />
+          <span>Home</span>
+        </S.HomeLink>
         {clusters.isSuccess && clusters.data.length > 0 && (
           <S.CollapseAllButton
             type="button"
