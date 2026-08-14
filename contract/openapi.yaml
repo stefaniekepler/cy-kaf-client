@@ -2929,6 +2929,34 @@ paths:
           application/json:
             schema:
               $ref: '#/components/schemas/RestartRequest'
+  /api/config/import:
+    post:
+      operationId: importConfig
+      summary: Imports a configuration file
+      parameters: []
+      responses:
+        '204':
+          description: The request has succeeded.
+        '400':
+          description: The server could not understand the request due to invalid syntax.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+      tags:
+        - ApplicationConfig
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              properties:
+                file:
+                  type: string
+                  format: binary
+              required:
+                - file
   /api/config/authentication:
     get:
       operationId: getAuthenticationSettings

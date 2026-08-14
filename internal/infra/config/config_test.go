@@ -395,3 +395,35 @@ kafka:
 `), false)
 	require.ErrorContains(t, err, "BOGUS")
 }
+
+func TestParseConfigValid(t *testing.T) {
+	snap, err := parseConfig([]byte(`
+kafka:
+  clusters:
+    - name: local
+      bootstrapServers: localhost:9092
+`))
+	require.NoError(t, err)
+	require.Len(t, snap.Clusters, 1)
+	require.Equal(t, "local", snap.Clusters[0].Name)
+	require.NotNil(t, snap.Raw)
+}
+
+func TestParseConfigRejectsInvalid(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		data string
+	}{
+		{"missing name", "kafka:\n  clusters:\n    - bootstrapServers: localhost:9092\n"},
+		{"missing bootstrap", "kafka:\n  clusters:\n    - name: local\n"},
+		{"duplicate name", "kafka:\n  clusters:\n    - name: a\n      bootstrapServers: x:9092\n    - name: a\n      bootstrapServers: y:9092\n"},
+		{"unknown masking", "kafka:\n  clusters:\n    - name: a\n      bootstrapServers: x:9092\n      masking:\n        - type: NOPE\n"},
+		{"not yaml", "kafka: [unclosed"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			_, err := parseConfig([]byte(tc.data))
+			require.Error(t, err)
+			require.ErrorIs(t, err, cluster.ErrInvalidConfig)
+		})
+	}
+}

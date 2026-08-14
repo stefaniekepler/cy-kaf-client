@@ -14,7 +14,8 @@ type RefreshRateSelectProps = {
   storageKey:
     | 'consumer-groups-refresh-rate'
     | 'topics-refresh-rate'
-    | `consumer-group-${string}-refresh-rate`;
+    | `consumer-group-${string}-refresh-rate`
+    | `topic-${string}-refresh-rate`;
 };
 
 export const RefreshRateSelect = ({ storageKey }: RefreshRateSelectProps) => {

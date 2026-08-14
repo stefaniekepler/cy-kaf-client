@@ -129,3 +129,21 @@ export function useValidateAppConfig() {
       }),
   });
 }
+
+export function useImportConfig() {
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: (payload: FormData) =>
+      fetch('/api/config/import', { method: 'POST', body: payload }).then(
+        async (res) => {
+          if (!res.ok) {
+            const body = (await res.json().catch(() => ({}))) as {
+              message?: string;
+            };
+            throw new Error(body.message || 'Import failed.');
+          }
+        }
+      ),
+    onSuccess: () => client.invalidateQueries({ queryKey: ['clusters'] }),
+  });
+}

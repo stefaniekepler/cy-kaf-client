@@ -5,6 +5,7 @@ pub enum DesktopAction {
     Retry,
     ReassignPort,
     OpenLogs,
+    RevealConfig,
     Quit,
 }
 
@@ -79,7 +80,7 @@ fn is_exact_action(url: &Url) -> bool {
 }
 
 fn is_known_action(host: &str) -> bool {
-    matches!(host, "retry" | "reassign-port" | "open-logs" | "quit")
+    matches!(host, "retry" | "reassign-port" | "open-logs" | "reveal-config" | "quit")
 }
 
 fn action_from_host(host: &str) -> DesktopAction {
@@ -87,6 +88,7 @@ fn action_from_host(host: &str) -> DesktopAction {
         "retry" => DesktopAction::Retry,
         "reassign-port" => DesktopAction::ReassignPort,
         "open-logs" => DesktopAction::OpenLogs,
+        "reveal-config" => DesktopAction::RevealConfig,
         "quit" => DesktopAction::Quit,
         _ => unreachable!("action host was checked before conversion"),
     }
@@ -186,6 +188,7 @@ mod tests {
             ("cy-kaf-action://retry", DesktopAction::Retry),
             ("cy-kaf-action://reassign-port", DesktopAction::ReassignPort),
             ("cy-kaf-action://open-logs", DesktopAction::OpenLogs),
+            ("cy-kaf-action://reveal-config", DesktopAction::RevealConfig),
             ("cy-kaf-action://quit", DesktopAction::Quit),
         ] {
             assert_eq!(

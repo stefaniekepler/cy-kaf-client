@@ -10,6 +10,11 @@ import (
 
 var ErrResultTooLarge = errors.New("result_too_large")
 
+// ErrInvalidConfig marks a configuration document that parses but violates the
+// config schema (missing name/bootstrapServers, duplicate cluster names, or an
+// unrecognized enum value). Callers (the import handler) map it to a 400.
+var ErrInvalidConfig = errors.New("invalid config")
+
 type ConnectionSpec struct {
 	BootstrapServers []string
 	Security         map[string]string
@@ -806,6 +811,14 @@ type ConfigStorePort interface {
 	Validate(ctx context.Context, snap ConfigSnapshot) (ConfigValidation, error)
 	// Save merges snap's edits back into config.yaml (Task 14).
 	Save(ctx context.Context, snap ConfigSnapshot) error
+	// Parse decodes data as a config document and validates its schema
+	// (cluster name/bootstrapServers required, no duplicate names, known
+	// masking enums), returning the snapshot for Save/Reload. A schema
+	// violation wraps ErrInvalidConfig.
+	Parse(data []byte) (ConfigSnapshot, error)
+	// Backup copies the existing config file to a sibling timestamped .bak
+	// and returns that path; when no config file exists it returns "".
+	Backup() (string, error)
 	// SaveRelatedFile stores an uploaded truststore/keystore/etc. and returns
 	// its on-disk location (Task 14).
 	SaveRelatedFile(ctx context.Context, name string, content []byte) (location string, err error)

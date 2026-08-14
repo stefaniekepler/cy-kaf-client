@@ -59,23 +59,32 @@ func (s *Store) Current() (cluster.ConfigSnapshot, error) {
 	if err != nil {
 		return cluster.ConfigSnapshot{}, fmt.Errorf("read config: %w", err)
 	}
-	var tree map[string]any
-	if err := yaml.Unmarshal(raw, &tree); err != nil {
-		return cluster.ConfigSnapshot{}, fmt.Errorf("parse config %s: %w", s.path, err)
-	}
-	var app App
-	if err := yaml.Unmarshal(raw, &app); err != nil {
-		return cluster.ConfigSnapshot{}, fmt.Errorf("parse config %s: %w", s.path, err)
-	}
-	defs := make([]cluster.Definition, 0, len(app.Kafka.Clusters))
-	for _, c := range app.Kafka.Clusters {
-		def, err := c.ToDomain()
-		if err != nil {
-			return cluster.ConfigSnapshot{}, err
+	return parseConfig(raw)
+}
+
+// Parse decodes + schema-validates data (no file I/O). See parseConfig.
+func (s *Store) Parse(data []byte) (cluster.ConfigSnapshot, error) {
+	return parseConfig(data)
+}
+
+// Backup copies the current config file to a timestamped sibling .bak and
+// returns that path; when no config file exists it returns "" (no error).
+func (s *Store) Backup() (string, error) {
+	if _, err := os.Stat(s.path); err != nil {
+		if errors.Is(err, os.ErrNotExist) {
+			return "", nil
 		}
-		defs = append(defs, def)
+		return "", fmt.Errorf("stat config: %w", err)
 	}
-	return cluster.ConfigSnapshot{Raw: tree, Clusters: defs}, nil
+	data, err := os.ReadFile(s.path)
+	if err != nil {
+		return "", fmt.Errorf("read config for backup: %w", err)
+	}
+	backup := s.path + "." + time.Now().Format("2006-01-02T15-04-05") + ".bak"
+	if err := os.WriteFile(backup, data, 0o600); err != nil {
+		return "", fmt.Errorf("write config backup: %w", err)
+	}
+	return backup, nil
 }
 
 // Validate probes each cluster's Kafka reachability and reports a per-cluster

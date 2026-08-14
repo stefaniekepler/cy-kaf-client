@@ -58,12 +58,22 @@ type fakeReloader struct {
 	err      error
 	applied  bool
 	lastSnap cluster.ConfigSnapshot
+
+	importErr       error
+	imported        bool
+	importedContent []byte
 }
 
 func (f *fakeReloader) Apply(_ context.Context, snap cluster.ConfigSnapshot) error {
 	f.applied = true
 	f.lastSnap = snap
 	return f.err
+}
+
+func (f *fakeReloader) Import(_ context.Context, content []byte) error {
+	f.imported = true
+	f.importedContent = content
+	return f.importErr
 }
 
 func withReloader(fr *fakeReloader) testServerOption {
@@ -411,4 +421,42 @@ func TestUploadConfigRelatedFile_SaveErrorIs400(t *testing.T) {
 	require.NoError(t, err)
 	defer func() { _ = resp.Body.Close() }()
 	require.Equal(t, 400, resp.StatusCode)
+}
+
+// TestImportConfig_AppliesContentAnd204 proves a multipart config upload reaches
+// Reloader.Import with the file bytes and the endpoint reports 204.
+func TestImportConfig_AppliesContentAnd204(t *testing.T) {
+	fr := &fakeReloader{}
+	srv := newTestServer(withReloader(fr))
+	defer srv.Close()
+
+	buf, ctype := multipartFile(t, "file", "config.yaml", "kafka:\n  clusters: []\n")
+	req, err := http.NewRequest(http.MethodPost, srv.URL+"/api/config/import", buf)
+	require.NoError(t, err)
+	req.Header.Set("Content-Type", ctype)
+	resp, err := http.DefaultClient.Do(req)
+	require.NoError(t, err)
+	defer func() { _ = resp.Body.Close() }()
+
+	require.Equal(t, http.StatusNoContent, resp.StatusCode)
+	require.True(t, fr.imported)
+	require.Equal(t, []byte("kafka:\n  clusters: []\n"), fr.importedContent)
+}
+
+// TestImportConfig_InvalidConfigIs400 proves a schema-violating import maps
+// cluster.ErrInvalidConfig to a 400.
+func TestImportConfig_InvalidConfigIs400(t *testing.T) {
+	fr := &fakeReloader{importErr: cluster.ErrInvalidConfig}
+	srv := newTestServer(withReloader(fr))
+	defer srv.Close()
+
+	buf, ctype := multipartFile(t, "file", "config.yaml", "bad")
+	req, err := http.NewRequest(http.MethodPost, srv.URL+"/api/config/import", buf)
+	require.NoError(t, err)
+	req.Header.Set("Content-Type", ctype)
+	resp, err := http.DefaultClient.Do(req)
+	require.NoError(t, err)
+	defer func() { _ = resp.Body.Close() }()
+
+	require.Equal(t, http.StatusBadRequest, resp.StatusCode)
 }

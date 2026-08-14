@@ -104,3 +104,15 @@ export const useLocalStorage = <T>(
 
   return [value, setStoredValue];
 };
+
+/**
+ * Writes a value to the localStorage entry backing one or more
+ * useLocalStorage(featureKey) instances and notifies their subscribers, so
+ * every mounted consumer re-reads and updates in the same tab (not just on
+ * remount or in other tabs). Takes the same unprefixed featureKey form as
+ * useLocalStorage; the `kafbat-ui-` prefix is applied internally.
+ */
+export const setLocalStorageValue = <T>(featureKey: string, value: T): void => {
+  const key = `${LOCAL_STORAGE_KEY_PREFIX}-${featureKey}`;
+  setStorageValue(key, value);
+};

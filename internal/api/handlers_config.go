@@ -8,6 +8,7 @@ package api
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -33,8 +34,10 @@ type ConfigServicer interface {
 // ReloaderServicer is the narrow interface RestartWithConfig consumes to apply
 // a new config in-process; *appcluster.Reloader satisfies it. Apply validates +
 // persists + swaps atomically-or-rolls-back (see the app Reloader's doc).
+// Import applies a raw config document (schema-validated, probe-free).
 type ReloaderServicer interface {
 	Apply(ctx context.Context, snap cluster.ConfigSnapshot) error
+	Import(ctx context.Context, content []byte) error
 }
 
 // GetCurrentConfig serves GET /api/config: returns the running configuration as
@@ -385,4 +388,35 @@ func (s *apiServer) UploadConfigRelatedFile(w http.ResponseWriter, r *http.Reque
 		return
 	}
 	writeJSON(w, http.StatusOK, generated.UploadedFileInfo{Location: loc})
+}
+
+// ImportConfig serves POST /api/config/import: reads the multipart "file" part
+// (the new config.yaml) and applies it via Reloader.Import (parse+validate,
+// backup, persist, probe-free reload). A schema violation is a 400; an
+// unexpected backend failure is a 500.
+func (s *apiServer) ImportConfig(w http.ResponseWriter, r *http.Request) {
+	if err := r.ParseMultipartForm(maxUploadBytes); err != nil {
+		writeJSON(w, http.StatusBadRequest, errorResponse(http.StatusBadRequest, "invalid multipart form"))
+		return
+	}
+	f, _, err := r.FormFile("file")
+	if err != nil {
+		writeJSON(w, http.StatusBadRequest, errorResponse(http.StatusBadRequest, "missing file part"))
+		return
+	}
+	defer func() { _ = f.Close() }()
+	content, err := io.ReadAll(f)
+	if err != nil {
+		writeJSON(w, http.StatusBadRequest, errorResponse(http.StatusBadRequest, "unreadable file part"))
+		return
+	}
+	if err := s.deps.Reloader.Import(r.Context(), content); err != nil {
+		if errors.Is(err, cluster.ErrInvalidConfig) {
+			writeJSON(w, http.StatusBadRequest, errorResponse(http.StatusBadRequest, "invalid configuration file"))
+			return
+		}
+		serverError(w, "ImportConfig", "failed to import configuration", err)
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
 }

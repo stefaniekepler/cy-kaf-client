@@ -17,6 +17,8 @@ import { useTopicDetails } from 'lib/hooks/api/topics';
 import EditIcon from 'components/common/Icons/EditIcon';
 import CloseIcon from 'components/common/Icons/CloseIcon';
 import FlexBox from 'components/common/FlexBox/FlexBox';
+import { RefreshRateSelect } from 'components/common/RefreshRateSelect/RefreshRateSelect';
+import { useMessagesAutoRefresh } from 'lib/hooks/useMessagesAutoRefresh';
 
 import * as S from './Filters.styled';
 import {
@@ -105,6 +107,8 @@ const Filters: React.FC<FiltersProps> = ({
     }
     refreshData();
   };
+
+  useMessagesAutoRefresh(topicName, refreshData);
 
   return (
     <FlexBox flexDirection="column" padding="0 16px">
@@ -214,6 +218,7 @@ const Filters: React.FC<FiltersProps> = ({
           >
             Refresh
           </Button>
+          <RefreshRateSelect storageKey={`topic-${topicName}-refresh-rate`} />
         </S.ToolbarControls>
         <S.SearchSlot>
           <Search placeholder="Search" value={search} onChange={setSearch} />
