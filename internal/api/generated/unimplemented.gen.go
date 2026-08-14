@@ -373,6 +373,10 @@ func (UnimplementedServer) GetAuthenticationSettings(w http.ResponseWriter, _ *h
 	writeNotImplemented(w)
 }
 
+func (UnimplementedServer) ImportConfig(w http.ResponseWriter, _ *http.Request) {
+	writeNotImplemented(w)
+}
+
 func (UnimplementedServer) UploadConfigRelatedFile(w http.ResponseWriter, _ *http.Request) {
 	writeNotImplemented(w)
 }

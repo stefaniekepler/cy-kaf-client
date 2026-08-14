@@ -2611,6 +2611,11 @@ type GetSerdesParams struct {
 	Use SerdeUsage `form:"use" json:"use"`
 }
 
+// ImportConfigMultipartBody defines parameters for ImportConfig.
+type ImportConfigMultipartBody struct {
+	File openapi_types.File `json:"file"`
+}
+
 // UploadConfigRelatedFileMultipartBody defines parameters for UploadConfigRelatedFile.
 type UploadConfigRelatedFileMultipartBody struct {
 	File openapi_types.File `json:"file"`
@@ -2693,6 +2698,9 @@ type RegisterFilterJSONRequestBody = MessageFilterRegistration
 
 // RestartWithConfigJSONRequestBody defines body for RestartWithConfig for application/json ContentType.
 type RestartWithConfigJSONRequestBody = RestartRequest
+
+// ImportConfigMultipartRequestBody defines body for ImportConfig for multipart/form-data ContentType.
+type ImportConfigMultipartRequestBody ImportConfigMultipartBody
 
 // UploadConfigRelatedFileMultipartRequestBody defines body for UploadConfigRelatedFile for multipart/form-data ContentType.
 type UploadConfigRelatedFileMultipartRequestBody UploadConfigRelatedFileMultipartBody
@@ -2978,6 +2986,9 @@ type ServerInterface interface {
 	// Get authentication methods enabled for the app and other related settings
 	// (GET /api/config/authentication)
 	GetAuthenticationSettings(w http.ResponseWriter, r *http.Request)
+	// Imports a configuration file
+	// (POST /api/config/import)
+	ImportConfig(w http.ResponseWriter, r *http.Request)
 	// Upload config related file
 	// (POST /api/config/relatedfiles)
 	UploadConfigRelatedFile(w http.ResponseWriter, r *http.Request)
@@ -3542,6 +3553,12 @@ func (_ Unimplemented) RestartWithConfig(w http.ResponseWriter, r *http.Request)
 // Get authentication methods enabled for the app and other related settings
 // (GET /api/config/authentication)
 func (_ Unimplemented) GetAuthenticationSettings(w http.ResponseWriter, r *http.Request) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// Imports a configuration file
+// (POST /api/config/import)
+func (_ Unimplemented) ImportConfig(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNotImplemented)
 }
 
@@ -7076,6 +7093,20 @@ func (siw *ServerInterfaceWrapper) GetAuthenticationSettings(w http.ResponseWrit
 	handler.ServeHTTP(w, r)
 }
 
+// ImportConfig operation middleware
+func (siw *ServerInterfaceWrapper) ImportConfig(w http.ResponseWriter, r *http.Request) {
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ImportConfig(w, r)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
 // UploadConfigRelatedFile operation middleware
 func (siw *ServerInterfaceWrapper) UploadConfigRelatedFile(w http.ResponseWriter, r *http.Request) {
 
@@ -7567,6 +7598,9 @@ func HandlerWithOptions(si ServerInterface, options ChiServerOptions) http.Handl
 	})
 	r.Group(func(r chi.Router) {
 		r.Get(options.BaseURL+"/api/config/authentication", wrapper.GetAuthenticationSettings)
+	})
+	r.Group(func(r chi.Router) {
+		r.Post(options.BaseURL+"/api/config/import", wrapper.ImportConfig)
 	})
 	r.Group(func(r chi.Router) {
 		r.Post(options.BaseURL+"/api/config/relatedfiles", wrapper.UploadConfigRelatedFile)
