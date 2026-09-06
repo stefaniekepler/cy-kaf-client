@@ -83,23 +83,28 @@ Then('KSQL DB heading visible', async function(this: PlaywrightWorld) {
   await this.locators.ksqlDb.heading.waitFor({ state: 'visible' });
 });
 
-Given('Dashboard is visible', async function() {
+Given('All clusters is visible from a cluster page', async function() {
   await this.page.goto(process.env.BASEURL!);
-  expect(this.locators.panel.getDashboardLink.isVisible());
+  await expect(this.locators.panel.brokersLink).toBeVisible();
+  await this.locators.panel.brokersLink.click();
+  await this.locators.brokers.heading.waitFor({ state: 'visible' });
+  await expect(this.locators.panel.allClustersLink).toBeVisible();
 });
 
-When('click on Dashboard link', async function(this: PlaywrightWorld) {
-  const dashboard = this.locators.panel.getDashboardLink;
-  await dashboard.isVisible();
-  await dashboard.click();
+When('click on All clusters link', async function(this: PlaywrightWorld) {
+  await this.locators.panel.allClustersLink.click();
 });
 
-Then('Dashboard heading visible', async function() {
+Then('Clusters heading visible', async function() {
   await this.locators.dashboard.heading.waitFor({ state: 'visible' });
 });
 
 Then('the end of current URL should be {string}', async function(this: PlaywrightWorld, expected: string) {
   const actual = new URL(this.page.url()).pathname;
+  if (expected === '/') {
+    expect(actual).toBe('/');
+    return;
+  }
   expect(actual.endsWith(expected)).toBeTruthy();
 });
 

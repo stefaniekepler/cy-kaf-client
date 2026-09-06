@@ -16,6 +16,6 @@ export default class PanelLocators {
     get consumersLink(): Locator { return this.linkByName('Consumers');}
     get schemaRegistryLink(): Locator { return this.linkByName('Schema Registry');}
     get ksqlDbLink(): Locator { return this.linkByName('KSQL DB');}
-    get getDashboardLink(): Locator { return this.linkByName('Dashboard');}
+    get allClustersLink(): Locator { return this.linkByName('All clusters');}
     get kafkaConnectLink(): Locator { return this.linkByName('Kafka Connect');}
 }

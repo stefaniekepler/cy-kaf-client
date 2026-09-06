@@ -58,7 +58,12 @@ const NavBar: React.FC<Props> = ({ onBurgerClick }) => {
     <S.Navbar role="navigation" aria-label="Page Header">
       <S.NavbarBrand>
         <S.NavbarBrand>
-          <Button buttonType="text" buttonSize="S" onClick={onBurgerClick}>
+          <Button
+            buttonType="text"
+            buttonSize="S"
+            aria-label="Toggle sidebar"
+            onClick={onBurgerClick}
+          >
             <MenuIcon />
           </Button>
 

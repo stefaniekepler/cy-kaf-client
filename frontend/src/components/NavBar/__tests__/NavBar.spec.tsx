@@ -24,7 +24,10 @@ const mockUseUpdateSettings = jest.mocked(useUpdateDesktopMCPSettings);
 const mockUseConfigure = jest.mocked(useConfigureDesktopMCP);
 
 describe('NavBar', () => {
+  const onBurgerClick = jest.fn();
+
   beforeEach(() => {
+    onBurgerClick.mockClear();
     Object.defineProperty(window, 'matchMedia', {
       writable: true,
       value: jest.fn().mockImplementation(() => ({
@@ -50,7 +53,18 @@ describe('NavBar', () => {
       reset: jest.fn(),
     } as unknown as ReturnType<typeof useConfigureDesktopMCP>);
 
-    render(<NavBar onBurgerClick={jest.fn()} />);
+    render(<NavBar onBurgerClick={onBurgerClick} />);
+  });
+
+  it('exposes a named sidebar toggle that invokes the burger callback', async () => {
+    const header = screen.getByRole('navigation', { name: 'Page Header' });
+    const sidebarToggle = within(header).getByRole('button', {
+      name: 'Toggle sidebar',
+    });
+
+    await userEvent.click(sidebarToggle);
+
+    expect(onBurgerClick).toHaveBeenCalledTimes(1);
   });
 
   it('renders only the retained header controls', () => {

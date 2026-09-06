@@ -230,7 +230,7 @@ e2e-p1a: build-fe build
 # only --name actually scopes what runs, same additive-paths pitfall
 # e2e-p1a's own comment documents):
 #   navigation.feature    (4 of 7)  Navigate to Brokers / Navigate to Topics /
-#     Navigate to Consumers / Navigate to Dashboard. EXCLUDED: Navigate to
+#     Navigate to Consumers / Navigate to all clusters. EXCLUDED: Navigate to
 #     Schema Registry / Kafka Connect / KSQL DB — those three integrations
 #     are never configured for the `local` cluster this target's config
 #     writes below (no schema registry/connect/ksql URL), so
@@ -300,7 +300,7 @@ e2e-p1b: build-fe build
 	echo "asserting deep-route base href regression fix (internal/api/static.go)"; \
 	curl -s http://127.0.0.1:8080/ui/clusters/local/all-topics | grep -q '<base href="/">' \
 	  || { echo 'FATAL: deep-route base href missing' >&2; cat /tmp/cy-kaf-e2e-p1b.log >&2; exit 1; }; \
-	(cd e2e && ENV=prod FORCE_COLOR=0 npx cucumber-js --config config/cucumber.js --name "^(Navigate to Brokers|Navigate to Topics|Navigate to Consumers|Navigate to Dashboard|Topics elements|Topics serchfield and ShowInternalTopics|TopicCreate elemets visible|TopicCreate ui functions|TopicCreate time to retain data functions|Topic Delete|Brokers visibility BrokerDetails visibility)$$" src/features/navigation.feature src/features/Topics.feature src/features/TopicsActions.feature src/features/Brokers.feature)
+	(cd e2e && ENV=prod FORCE_COLOR=0 npx cucumber-js --config config/cucumber.js --name "^(Navigate to Brokers|Navigate to Topics|Navigate to Consumers|Navigate to all clusters|Topics elements|Topics serchfield and ShowInternalTopics|TopicCreate elemets visible|TopicCreate ui functions|TopicCreate time to retain data functions|Topic Delete|Brokers visibility BrokerDetails visibility)$$" src/features/navigation.feature src/features/Topics.feature src/features/TopicsActions.feature src/features/Brokers.feature)
 
 e2e-p1c: build-fe build
 	$(E2E_COMPOSE) up -d kafka0 kafka-init-topics; \

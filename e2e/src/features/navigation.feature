@@ -36,7 +36,8 @@ Feature: Navigation panel links
     Then KSQL DB heading visible
     Then the part of current URL should be "ksqldb"
 
-  Scenario: Navigate to Dashboard
-    Given Dashboard is visible
-    When click on Dashboard link
-    Then Dashboard heading visible
+  Scenario: Navigate to all clusters
+    Given All clusters is visible from a cluster page
+    When click on All clusters link
+    Then Clusters heading visible
+    Then the end of current URL should be "/"

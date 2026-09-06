@@ -35,9 +35,6 @@ export const Sidebar = styled.div<{ $visible: boolean }>(
     left: 0;
     bottom: 0;
     padding: 16px;
-    scrollbar-gutter: stable;
-    scrollbar-width: thin;
-    overflow-y: auto;
     transition:
       width 0.25s,
       opacity 0.25s,
@@ -53,28 +50,6 @@ export const Sidebar = styled.div<{ $visible: boolean }>(
       `};
       left: -${theme.layout.navBarWidth};
       z-index: 1000;
-    }
-
-    &::-webkit-scrollbar {
-      width: 8px;
-    }
-
-    &::-webkit-scrollbar-track {
-      background-color: ${theme.scrollbar.trackColor.normal};
-    }
-
-    &::-webkit-scrollbar-thumb {
-      width: 8px;
-      background-color: ${theme.scrollbar.thumbColor.normal};
-      border-radius: 4px;
-    }
-
-    &:hover::-webkit-scrollbar-thumb {
-      background: ${theme.scrollbar.thumbColor.active};
-    }
-
-    &:hover::-webkit-scrollbar-track {
-      background-color: ${theme.scrollbar.trackColor.active};
     }
   `
 );

@@ -100,7 +100,7 @@ const Dashboard: React.FC = () => {
 
   return (
     <>
-      <PageHeading text="Dashboard" />
+      <PageHeading text="Clusters" />
       <Metrics.Wrapper>
         <Metrics.Section>
           <Metrics.Indicator label={<Tag color="green">Online</Tag>}>

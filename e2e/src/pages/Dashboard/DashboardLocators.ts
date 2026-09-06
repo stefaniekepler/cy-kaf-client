@@ -7,5 +7,5 @@ export default class DashboardLocators {
       this.page = page;
     }
 
-    get heading(): Locator  { return this.page.getByRole('heading', { name: 'Dashboard' })};
+    get heading(): Locator  { return this.page.getByRole('heading', { name: 'Clusters' })};
 }

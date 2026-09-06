@@ -18,6 +18,10 @@ import { useGetUserInfo } from 'lib/hooks/api/roles';
 import { useScreenSize } from 'lib/hooks/useScreenSize';
 import PageLoader from 'components/common/PageLoader/PageLoader';
 
+import useAllClustersReminder, {
+  getIsClusterRoute,
+} from './useAllClustersReminder';
+
 const PageContainer: FC<PropsWithChildren> = ({ children }) => {
   const { isLarge } = useScreenSize();
   const {
@@ -28,6 +32,12 @@ const PageContainer: FC<PropsWithChildren> = ({ children }) => {
   const clusters = useClusters();
   const appInfo = React.useContext(GlobalSettingsContext);
   const location = useLocation();
+  const { isAllClustersReminderVisible, dismissAllClustersReminder } =
+    useAllClustersReminder({
+      isClusterRoute: getIsClusterRoute(location.pathname),
+      isSidebarVisible,
+      isLarge,
+    });
   const navigate = useNavigate();
   const { data: authInfo } = useGetUserInfo();
 
@@ -54,7 +64,10 @@ const PageContainer: FC<PropsWithChildren> = ({ children }) => {
       <NavBar onBurgerClick={toggle} />
       <S.Container $isSidebarVisible={isSidebarVisible}>
         <S.Sidebar aria-label="Sidebar" $visible={isSidebarVisible}>
-          <Nav />
+          <Nav
+            isAllClustersReminderVisible={isAllClustersReminderVisible}
+            onAllClustersReminderDismiss={dismissAllClustersReminder}
+          />
         </S.Sidebar>
         <S.Overlay
           $visible={isSidebarVisible}

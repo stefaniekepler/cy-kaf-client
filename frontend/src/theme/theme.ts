@@ -456,6 +456,13 @@ export const theme = {
     backgroundColor: Colors.brand[0],
     transparentColor: 'transparent',
   },
+  allClustersReminder: {
+    backgroundColor: Colors.neutral[3],
+    borderColor: Colors.neutral[10],
+    color: Colors.neutral[60],
+    titleColor: Colors.neutral[70],
+    shadow: Colors.transparency[20],
+  },
   link: {
     color: Colors.brand[50],
     hoverColor: Colors.brand[60],
@@ -1054,6 +1061,13 @@ export const darkTheme: ThemeType = {
     },
     backgroundColor: Colors.brand[90],
     transparentColor: 'transparent',
+  },
+  allClustersReminder: {
+    backgroundColor: Colors.neutral[85],
+    borderColor: Colors.neutral[75],
+    color: Colors.neutral[30],
+    titleColor: Colors.neutral[20],
+    shadow: Colors.transparency[20],
   },
   link: {
     color: Colors.brand[50],

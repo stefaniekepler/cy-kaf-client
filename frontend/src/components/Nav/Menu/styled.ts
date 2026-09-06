@@ -10,8 +10,19 @@ export const ColorPickerWrapper = styled.div`
 export const MenuItem = styled('li').attrs({ role: 'menuitem' })<{
   $variant: 'primary' | 'secondary';
   $isActive?: boolean;
-}>(
-  ({ theme, $variant, $isActive }) => css`
+  $isEmphasized?: boolean;
+}>(({ theme, $variant, $isActive, $isEmphasized }) => {
+  const normalBackground = $isEmphasized
+    ? theme.menu.secondary.backgroundColor.hover
+    : theme.menu[$variant].backgroundColor.normal;
+  const activeBackground = $isEmphasized
+    ? theme.menu.secondary.backgroundColor.active
+    : theme.menu[$variant].backgroundColor.active;
+  const hoverBackground = $isEmphasized
+    ? theme.menu.secondary.backgroundColor.active
+    : theme.menu[$variant].backgroundColor.hover;
+
+  return css`
     font-size: 14px;
     font-weight: ${theme.menu[$isActive ? 'primary' : $variant].fontWeight};
     min-height: 28px;
@@ -25,15 +36,16 @@ export const MenuItem = styled('li').attrs({ role: 'menuitem' })<{
     cursor: pointer;
     text-decoration: none;
     border-radius: 8px;
-    background-color: ${$isActive
-      ? theme.menu[$variant].backgroundColor.active
-      : theme.menu[$variant].backgroundColor.normal};
+    background-color: ${$isActive ? activeBackground : normalBackground};
+    box-shadow: ${$isEmphasized
+      ? `inset 0 0 0 1px ${theme.layout.stuffBorderColor}`
+      : 'none'};
     color: ${$isActive
       ? theme.menu[$variant].color.active
       : theme.menu[$variant].color.normal};
 
     &:hover {
-      background-color: ${theme.menu[$variant].backgroundColor.hover};
+      background-color: ${hoverBackground};
       color: ${theme.menu[$variant].color.hover};
 
       ${ColorPickerWrapper} {
@@ -44,11 +56,38 @@ export const MenuItem = styled('li').attrs({ role: 'menuitem' })<{
     }
 
     &:active {
-      background-color: ${theme.menu[$variant].backgroundColor.active};
+      background-color: ${activeBackground};
       color: ${theme.menu[$variant].color.active};
     }
-  `
-);
+  `;
+});
+
+export const MenuItemContent = styled.span`
+  display: flex;
+  align-items: center;
+  column-gap: 6px;
+  min-width: 0;
+  width: 100%;
+
+  &,
+  & > * {
+    margin-bottom: 0 !important;
+  }
+`;
+
+export const LeadingIcon = styled.span`
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 16px;
+  width: 16px;
+  height: 16px;
+
+  & > svg {
+    display: block;
+    margin-bottom: 0 !important;
+  }
+`;
 
 export const ContentWrapper = styled.div`
   display: flex;
