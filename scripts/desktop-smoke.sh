@@ -11,7 +11,7 @@ if [[ "$(uname -s)" != "Darwin" ]]; then
   exit 2
 fi
 
-for command_name in lsof osascript paste pgrep ps sed sort; do
+for command_name in lsof osascript paste pgrep ps sed sort python3; do
   if ! command -v "$command_name" >/dev/null 2>&1; then
     echo "required command not found: $command_name" >&2
     exit 2
@@ -143,6 +143,36 @@ close_main_window() {
     "$shell_pid" >/dev/null
 }
 
+click_web_button() {
+  osascript - "$shell_pid" "$1" <<'APPLESCRIPT'
+on run argv
+  set targetPid to item 1 of argv as integer
+  set targetLabel to item 2 of argv
+  tell application "System Events"
+    tell first application process whose unix id is targetPid
+      set elementsList to get entire contents of window 1
+      repeat with itemRef in elementsList
+        if role of itemRef is "AXButton" then
+          if name of itemRef is targetLabel or description of itemRef is targetLabel then
+            perform action "AXPress" of itemRef
+            return "clicked"
+          end if
+        end if
+      end repeat
+    end tell
+  end tell
+  error "requested button is not ready"
+end run
+APPLESCRIPT
+}
+
+config_export_count() {
+  python3 - "$smoke_directory/downloads" <<'PYCOUNT'
+import pathlib, sys
+print(len(list(pathlib.Path(sys.argv[1]).glob("kafka-environments-*.yaml"))))
+PYCOUNT
+}
+
 printf 'kafka:\n  clusters: []\n' >"$config_path"
 browser_before="$(browser_state)"
 
@@ -192,6 +222,38 @@ if [[ "$listen_count" != "1" ]]; then
   fail "sidecar must own exactly one TCP listener; lsof=[$listen_output]"
 fi
 [[ "$port" =~ ^[1-9][0-9]*$ ]] || fail "sidecar listener is not restricted to 127.0.0.1"
+
+settings_ready=""
+for _ in $(seq 1 30); do
+  if click_web_button "Settings" >/dev/null 2>&1; then
+    settings_ready=1
+    break
+  fi
+  sleep 0.5
+done
+[[ -n "$settings_ready" ]] || fail "Settings did not become available"
+
+# Actual WKWebView downloads: a blob anchor alone silently cancels on macOS
+# without the native download handler. Use only the isolated empty fixture.
+for expected_exports in 1 2; do
+  click_web_button "一键导出配置" >/dev/null || fail "could not click configuration export"
+  exported=""
+  for _ in $(seq 1 30); do
+    if [[ "$(config_export_count)" == "$expected_exports" ]]; then
+      exported=1
+      break
+    fi
+    sleep 0.5
+  done
+  [[ -n "$exported" ]] || fail "configuration export did not create a distinct download"
+done
+python3 - "$smoke_directory/downloads" <<'PYEXPORT' || fail "configuration export content mismatch"
+import pathlib, sys
+files = list(pathlib.Path(sys.argv[1]).glob("kafka-environments-*.yaml"))
+assert len(files) == 2
+for file in files:
+    assert "".join(file.read_text().split()) == "kafka:clusters:[]"
+PYEXPORT
 
 browser_after="$(browser_state)"
 [[ "$browser_after" == "$browser_before" ]] || {

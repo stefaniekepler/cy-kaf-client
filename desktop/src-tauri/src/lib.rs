@@ -1,3 +1,4 @@
+pub mod downloads;
 pub mod host;
 pub mod lifecycle;
 pub mod logging;
@@ -87,6 +88,11 @@ pub fn run() {
             let new_window_app = Arc::clone(&app_origin);
             let new_window_sidecar = Arc::clone(&sidecar_origin);
             let page_view_state = Arc::clone(&view_state);
+            let download_sidecar = Arc::clone(&sidecar_origin);
+            let download_directory = match test_config.as_ref() {
+                Some(config) => config.parent().map(|parent| parent.join("downloads")),
+                None => app.path().download_dir().ok(),
+            };
 
             let window =
                 WebviewWindowBuilder::new(app, MAIN_WINDOW, WebviewUrl::App("index.html".into()))
@@ -104,6 +110,31 @@ pub fn run() {
                             &navigation_logs,
                             &navigation_app_handle,
                         )
+                    })
+                    .on_download(move |webview, event| {
+                        match event {
+                            tauri::webview::DownloadEvent::Requested { url, destination } => {
+                                let allowed = download_sidecar.read().ok().and_then(|origin| {
+                                    downloads::config_download_destination(
+                                        &url, origin.as_ref(), download_directory.as_deref()?, destination,
+                                    )
+                                });
+                                if let Some(path) = allowed
+                                    && path.parent().is_some_and(|parent| std::fs::create_dir_all(parent).is_ok())
+                                {
+                                    *destination = path;
+                                    return true;
+                                }
+                                let _ = webview.eval("window.dispatchEvent(new CustomEvent('cy-kaf-config-export-finished', {detail: {success: false}}));");
+                                false
+                            }
+                            tauri::webview::DownloadEvent::Finished { success, .. } => {
+                                let script = format!("window.dispatchEvent(new CustomEvent('cy-kaf-config-export-finished', {{detail: {{success: {success}}}}}));");
+                                let _ = webview.eval(&script);
+                                true
+                            }
+                            _ => false,
+                        }
                     })
                     .on_new_window(move |url, _features| {
                         handle_new_window(&url, &new_window_app, &new_window_sidecar);

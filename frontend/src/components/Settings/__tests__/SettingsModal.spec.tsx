@@ -838,7 +838,9 @@ describe('SettingsModal', () => {
     const removeListener = jest.spyOn(window, 'removeEventListener');
     const { rerender, container } = renderModal();
 
-    expect(container).not.toHaveTextContent(/[\u3400-\u9fff]/);
+    expect(
+      within(container).getByRole('button', { name: '一键导入配置' })
+    ).toBeVisible();
     const listenerCall = addListener.mock.calls.find(
       ([type]) => type === 'cy-kaf-open-logs-error'
     );

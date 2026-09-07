@@ -134,7 +134,9 @@ func TestStoreValidateWithRealProbeReportsUnreachableKafka(t *testing.T) {
 	require.NoError(t, err)
 
 	require.True(t, val.Clusters["dead"].Kafka.Error, "an unreachable bootstrap must fail the kafka probe")
-	require.NotEmpty(t, val.Clusters["dead"].Kafka.ErrorMessage)
+	require.Contains(t, val.Clusters["dead"].Kafka.ErrorMessage, "现象：目标端口 127.0.0.1:1 当前不接受 TCP 连接")
+	require.Contains(t, val.Clusters["dead"].Kafka.ErrorMessage, "常见原因：Kafka 未启动")
+	require.Contains(t, val.Clusters["dead"].Kafka.ErrorMessage, "建议检查：")
 }
 
 // TestStoreSaveRoundTripsEditsAndPreservesUnmodeledFields proves Save writes

@@ -101,7 +101,8 @@ type Deps struct {
 	// Config 供 getCurrentConfig/validateConfig（P1c Task 13 读+校验）
 	// 与 uploadConfigRelatedFile（Task 14）。生产环境注入
 	// *appcluster.ConfigService（包裹 *infra/config.Store）。
-	Config ConfigServicer
+	Config         ConfigServicer
+	ConfigTransfer ConfigTransferServicer
 	// Ksql 供 KSQL 四端点（P3）：登记懒执行 pipe、打开 SSE 响应以及
 	// 查询 streams/tables 元数据。生产环境注入 *appcluster.KsqlService。
 	Ksql KsqlServicer

@@ -31,8 +31,9 @@ type ConfigServicer interface {
 }
 
 // ReloaderServicer is the narrow interface RestartWithConfig consumes to apply
-// a new config in-process; *appcluster.Reloader satisfies it. Apply validates +
-// persists + swaps atomically-or-rolls-back (see the app Reloader's doc).
+// a new config in-process; *appcluster.Reloader satisfies it. Apply persists +
+// swaps atomically-or-rolls-back (see the app Reloader's doc). Connectivity
+// probing belongs exclusively to the explicit ValidateConfig action.
 type ReloaderServicer interface {
 	Apply(ctx context.Context, snap cluster.ConfigSnapshot) error
 }
@@ -311,9 +312,10 @@ func propertyValidation(pv cluster.PropertyValidation) generated.ApplicationProp
 }
 
 // RestartWithConfig serves PUT /api/config: applies a RestartRequest's config
-// in-process (validate + persist + smooth reload, all in Reloader.Apply) and
+// in-process (persist + smooth reload, both in Reloader.Apply) and
 // reports 204. A malformed body or a missing config object is a 400; a reload
-// failure (unreachable new config -> rollback, or a persist failure) is a 500.
+// persistence failure is a 500. Kafka reachability never blocks persistence;
+// users can probe it separately through ValidateConfig.
 //
 // The snapshot handed to Apply carries BOTH the parsed clusters (for the
 // reload's runtime defs) and the raw properties tree pulled from the untyped

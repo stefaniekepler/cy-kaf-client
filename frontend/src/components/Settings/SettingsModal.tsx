@@ -13,6 +13,7 @@ import {
 } from 'lib/hooks/api/desktopMcp';
 
 import * as S from './SettingsModal.styled';
+import ConfigTransferSection from './ConfigTransferSection';
 
 type Props = {
   isOpen: boolean;
@@ -317,6 +318,7 @@ const SettingsModal: React.FC<Props> = ({ isOpen, onClose, triggerRef }) => {
         }
       >
         <S.Content>
+          <ConfigTransferSection />
           <S.Section>
             <S.SectionHeading>MCP</S.SectionHeading>
             {settingsQuery.isLoading && <p>Loading MCP settings...</p>}

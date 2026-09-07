@@ -12,7 +12,8 @@
     "test:all-clusters-reminder": "playwright test --config=src/playwright.config.ts all-clusters-reminder.spec.ts",
     "posttest": "npx ts-node src/helper/report/report.ts",
     "test:failed": "cucumber-js -p rerun @rerun.txt",
-    "lint": "eslint 'src/**/*.ts' --fix"
+    "lint": "eslint 'src/**/*.ts' --fix",
+    "test:config-transfer": "playwright test --config=src/playwright.config.ts config-transfer.spec.ts"
   },
   "keywords": [],
   "author": "",

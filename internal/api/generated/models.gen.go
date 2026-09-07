@@ -250,6 +250,27 @@ func (e CompatibilityLevelCompatibility) Valid() bool {
 	}
 }
 
+// Defines values for ConfigImportConflictReason.
+const (
+	Address        ConfigImportConflictReason = "address"
+	Name           ConfigImportConflictReason = "name"
+	NameAndAddress ConfigImportConflictReason = "name_and_address"
+)
+
+// Valid indicates whether the value is a known member of the ConfigImportConflictReason enum.
+func (e ConfigImportConflictReason) Valid() bool {
+	switch e {
+	case Address:
+		return true
+	case Name:
+		return true
+	case NameAndAddress:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for ConfigSource.
 const (
 	ConfigSourceDEFAULTCONFIG              ConfigSource = "DEFAULT_CONFIG"
@@ -1561,6 +1582,55 @@ type CompatibilityLevel struct {
 // CompatibilityLevelCompatibility defines model for CompatibilityLevel.Compatibility.
 type CompatibilityLevelCompatibility string
 
+// ConfigImportConflict defines model for ConfigImportConflict.
+type ConfigImportConflict struct {
+	BootstrapServers string                     `json:"bootstrapServers"`
+	Name             string                     `json:"name"`
+	Reason           ConfigImportConflictReason `json:"reason"`
+}
+
+// ConfigImportConflictReason defines model for ConfigImportConflict.Reason.
+type ConfigImportConflictReason string
+
+// ConfigImportEntry defines model for ConfigImportEntry.
+type ConfigImportEntry struct {
+	BootstrapServers string                 `json:"bootstrapServers"`
+	Conflicts        []ConfigImportConflict `json:"conflicts"`
+	Index            int                    `json:"index"`
+	Name             string                 `json:"name"`
+
+	// Overlaps Indices of incoming entries that cannot be selected together
+	Overlaps []int `json:"overlaps"`
+}
+
+// ConfigImportFile defines model for ConfigImportFile.
+type ConfigImportFile struct {
+	// Content A single YAML document containing kafka.clusters
+	Content string `json:"content"`
+}
+
+// ConfigImportPreview defines model for ConfigImportPreview.
+type ConfigImportPreview struct {
+	Entries  []ConfigImportEntry `json:"entries"`
+	Revision string              `json:"revision"`
+}
+
+// ConfigImportResult defines model for ConfigImportResult.
+type ConfigImportResult struct {
+	Added int `json:"added"`
+
+	// Replaced Number of local environments replaced
+	Replaced int `json:"replaced"`
+	Skipped  int `json:"skipped"`
+}
+
+// ConfigImportSelection defines model for ConfigImportSelection.
+type ConfigImportSelection struct {
+	Content  string `json:"content"`
+	Revision string `json:"revision"`
+	Selected []int  `json:"selected"`
+}
+
 // ConfigSource defines model for ConfigSource.
 type ConfigSource string
 
@@ -2694,6 +2764,12 @@ type RegisterFilterJSONRequestBody = MessageFilterRegistration
 // RestartWithConfigJSONRequestBody defines body for RestartWithConfig for application/json ContentType.
 type RestartWithConfigJSONRequestBody = RestartRequest
 
+// ImportKafkaConfigJSONRequestBody defines body for ImportKafkaConfig for application/json ContentType.
+type ImportKafkaConfigJSONRequestBody = ConfigImportSelection
+
+// PreviewKafkaConfigImportJSONRequestBody defines body for PreviewKafkaConfigImport for application/json ContentType.
+type PreviewKafkaConfigImportJSONRequestBody = ConfigImportFile
+
 // UploadConfigRelatedFileMultipartRequestBody defines body for UploadConfigRelatedFile for multipart/form-data ContentType.
 type UploadConfigRelatedFileMultipartRequestBody UploadConfigRelatedFileMultipartBody
 
@@ -2978,6 +3054,15 @@ type ServerInterface interface {
 	// Get authentication methods enabled for the app and other related settings
 	// (GET /api/config/authentication)
 	GetAuthenticationSettings(w http.ResponseWriter, r *http.Request)
+	// Export all Kafka environments as YAML
+	// (GET /api/config/export)
+	ExportKafkaConfig(w http.ResponseWriter, r *http.Request)
+	// Import selected environments, replacing reviewed local conflicts
+	// (POST /api/config/import)
+	ImportKafkaConfig(w http.ResponseWriter, r *http.Request)
+	// Validate a YAML file and list all conflicting environments
+	// (POST /api/config/import/preview)
+	PreviewKafkaConfigImport(w http.ResponseWriter, r *http.Request)
 	// Upload config related file
 	// (POST /api/config/relatedfiles)
 	UploadConfigRelatedFile(w http.ResponseWriter, r *http.Request)
@@ -3542,6 +3627,24 @@ func (_ Unimplemented) RestartWithConfig(w http.ResponseWriter, r *http.Request)
 // Get authentication methods enabled for the app and other related settings
 // (GET /api/config/authentication)
 func (_ Unimplemented) GetAuthenticationSettings(w http.ResponseWriter, r *http.Request) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// Export all Kafka environments as YAML
+// (GET /api/config/export)
+func (_ Unimplemented) ExportKafkaConfig(w http.ResponseWriter, r *http.Request) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// Import selected environments, replacing reviewed local conflicts
+// (POST /api/config/import)
+func (_ Unimplemented) ImportKafkaConfig(w http.ResponseWriter, r *http.Request) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// Validate a YAML file and list all conflicting environments
+// (POST /api/config/import/preview)
+func (_ Unimplemented) PreviewKafkaConfigImport(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNotImplemented)
 }
 
@@ -7076,6 +7179,48 @@ func (siw *ServerInterfaceWrapper) GetAuthenticationSettings(w http.ResponseWrit
 	handler.ServeHTTP(w, r)
 }
 
+// ExportKafkaConfig operation middleware
+func (siw *ServerInterfaceWrapper) ExportKafkaConfig(w http.ResponseWriter, r *http.Request) {
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ExportKafkaConfig(w, r)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// ImportKafkaConfig operation middleware
+func (siw *ServerInterfaceWrapper) ImportKafkaConfig(w http.ResponseWriter, r *http.Request) {
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ImportKafkaConfig(w, r)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// PreviewKafkaConfigImport operation middleware
+func (siw *ServerInterfaceWrapper) PreviewKafkaConfigImport(w http.ResponseWriter, r *http.Request) {
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.PreviewKafkaConfigImport(w, r)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
 // UploadConfigRelatedFile operation middleware
 func (siw *ServerInterfaceWrapper) UploadConfigRelatedFile(w http.ResponseWriter, r *http.Request) {
 
@@ -7567,6 +7712,15 @@ func HandlerWithOptions(si ServerInterface, options ChiServerOptions) http.Handl
 	})
 	r.Group(func(r chi.Router) {
 		r.Get(options.BaseURL+"/api/config/authentication", wrapper.GetAuthenticationSettings)
+	})
+	r.Group(func(r chi.Router) {
+		r.Get(options.BaseURL+"/api/config/export", wrapper.ExportKafkaConfig)
+	})
+	r.Group(func(r chi.Router) {
+		r.Post(options.BaseURL+"/api/config/import", wrapper.ImportKafkaConfig)
+	})
+	r.Group(func(r chi.Router) {
+		r.Post(options.BaseURL+"/api/config/import/preview", wrapper.PreviewKafkaConfigImport)
 	})
 	r.Group(func(r chi.Router) {
 		r.Post(options.BaseURL+"/api/config/relatedfiles", wrapper.UploadConfigRelatedFile)

@@ -52,6 +52,7 @@ type wiredServices struct {
 	Analysis       *appcluster.AnalysisService
 	SmartFilters   *appcluster.SmartFilterService
 	Config         *appcluster.ConfigService
+	ConfigTransfer *appcluster.ConfigTransferService
 	Reloader       *appcluster.Reloader
 	Resolver       *appcluster.Resolver
 	DesktopMCP     api.DesktopMCPServicer
@@ -138,6 +139,7 @@ func wireServices(ctx context.Context, cfg *config.App, configPath string) (*wir
 		Analysis:       analyses,
 		SmartFilters:   smartFilters,
 		Config:         configService,
+		ConfigTransfer: appcluster.NewConfigTransferService(configStore, config.TransferCodec{}, reloader),
 		Reloader:       reloader,
 		Resolver:       resolver,
 		ClusterCount:   len(defs),
@@ -147,27 +149,28 @@ func wireServices(ctx context.Context, cfg *config.App, configPath string) (*wir
 
 func (s *wiredServices) apiDeps(desktop *api.DesktopOptions) api.Deps {
 	return api.Deps{
-		States:       s.States,
-		LogDirs:      s.Brokers,
-		Brokers:      s.Brokers,
-		Topics:       s.Topics,
-		Groups:       s.Groups,
-		Serdes:       s.Serdes,
-		Schemas:      s.Schemas,
-		Connects:     s.Connects,
-		Acls:         s.Acls,
-		Quotas:       s.Quotas,
-		Ksql:         s.KSQL,
-		Messages:     s.Messages,
-		Analysis:     s.Analysis,
-		SmartFilters: s.SmartFilters,
-		Config:       s.Config,
-		Reloader:     s.Reloader,
-		IsReadOnly:   s.Resolver.IsReadOnly,
-		Build:        version.Info(),
-		Static:       webui.FS(),
-		Desktop:      desktop,
-		DesktopMCP:   s.DesktopMCP,
+		States:         s.States,
+		LogDirs:        s.Brokers,
+		Brokers:        s.Brokers,
+		Topics:         s.Topics,
+		Groups:         s.Groups,
+		Serdes:         s.Serdes,
+		Schemas:        s.Schemas,
+		Connects:       s.Connects,
+		Acls:           s.Acls,
+		Quotas:         s.Quotas,
+		Ksql:           s.KSQL,
+		Messages:       s.Messages,
+		Analysis:       s.Analysis,
+		SmartFilters:   s.SmartFilters,
+		Config:         s.Config,
+		ConfigTransfer: s.ConfigTransfer,
+		Reloader:       s.Reloader,
+		IsReadOnly:     s.Resolver.IsReadOnly,
+		Build:          version.Info(),
+		Static:         webui.FS(),
+		Desktop:        desktop,
+		DesktopMCP:     s.DesktopMCP,
 	}
 }
 

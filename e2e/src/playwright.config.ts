@@ -18,7 +18,7 @@ export default defineConfig({
   },
   webServer: {
     command:
-      "pnpm --dir frontend exec vite --mode development --host 127.0.0.1 --port 4176 --strictPort --no-open",
+      "cd frontend && pnpm exec vite --mode development --host 127.0.0.1 --port 4176 --strictPort --no-open",
     cwd: path.resolve(__dirname, "../.."),
     url: "http://127.0.0.1:4176",
     reuseExistingServer: false,

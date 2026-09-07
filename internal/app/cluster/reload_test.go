@@ -41,15 +41,19 @@ type stubConfigStore struct {
 	validateErr error
 	saveErr     error
 
-	mu         sync.Mutex
-	saveCalled bool
-	savedSnap  cluster.ConfigSnapshot
+	mu             sync.Mutex
+	validateCalled bool
+	saveCalled     bool
+	savedSnap      cluster.ConfigSnapshot
 }
 
 func (s *stubConfigStore) Current() (cluster.ConfigSnapshot, error) {
 	return cluster.ConfigSnapshot{}, nil
 }
 func (s *stubConfigStore) Validate(context.Context, cluster.ConfigSnapshot) (cluster.ConfigValidation, error) {
+	s.mu.Lock()
+	s.validateCalled = true
+	s.mu.Unlock()
 	return s.validation, s.validateErr
 }
 func (s *stubConfigStore) Save(_ context.Context, snap cluster.ConfigSnapshot) error {
@@ -67,13 +71,18 @@ func (s *stubConfigStore) sawSave() bool {
 	defer s.mu.Unlock()
 	return s.saveCalled
 }
+func (s *stubConfigStore) sawValidate() bool {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.validateCalled
+}
 
 func conn(bootstrap string) cluster.ConnectionSpec {
 	return cluster.ConnectionSpec{BootstrapServers: []string{bootstrap}}
 }
 
 // TestReloaderApplySwapsDefsInvalidatesChangedAndRealignsCache proves the happy
-// path: Validate passes -> Resolver holds the new defs, exactly the changed +
+// path: Save succeeds -> Resolver holds the new defs, exactly the changed +
 // removed clusters are Invalidate'd (unchanged/added are not), and the state
 // cache realigns (added scraped, removed dropped).
 func TestReloaderApplySwapsDefsInvalidatesChangedAndRealignsCache(t *testing.T) {
@@ -87,7 +96,7 @@ func TestReloaderApplySwapsDefsInvalidatesChangedAndRealignsCache(t *testing.T) 
 	life := &recordingLifecycle{}
 	sc := appcluster.NewStateCache(res, &fakeState{}, life, time.Hour)
 	sc.Start(ctx)
-	store := &stubConfigStore{} // empty verdict => passes
+	store := &stubConfigStore{}
 	rl := appcluster.NewReloader(res, life, sc, store)
 
 	newDefs := []cluster.Definition{
@@ -147,10 +156,12 @@ func TestReloaderApplyUpdatesCachedDefinitionFeaturesImmediately(t *testing.T) {
 	require.Empty(t, life.names(), "unchanged Kafka connection should not be rebuilt")
 }
 
-// TestReloaderApplyRollsBackWhenValidationFails proves an unreachable new config
-// leaves the running state completely untouched: defs unchanged, nothing
-// invalidated, error returned.
-func TestReloaderApplyRollsBackWhenValidationFails(t *testing.T) {
+// TestReloaderApplyDoesNotProbeConnectivityBeforeSaving proves Submit is a
+// persistence action, not a connectivity gate: even a probe that would fail
+// must not run, and an offline cluster must still be saved and applied.
+func TestReloaderApplyDoesNotProbeConnectivityBeforeSaving(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
 	res := appcluster.NewResolver([]cluster.Definition{{Name: "prod", Conn: conn("prod:9092")}})
 	life := &recordingLifecycle{}
 	sc := appcluster.NewStateCache(res, &fakeState{}, life, time.Hour)
@@ -158,29 +169,30 @@ func TestReloaderApplyRollsBackWhenValidationFails(t *testing.T) {
 		Clusters: map[string]cluster.ClusterValidation{
 			"prod": {Kafka: cluster.PropertyValidation{Error: true, ErrorMessage: "dial tcp: unreachable"}},
 		},
-	}}
+	}, validateErr: errors.New("probe must not run")}
 	rl := appcluster.NewReloader(res, life, sc, store)
 
-	err := rl.Apply(context.Background(), cluster.ConfigSnapshot{
+	err := rl.Apply(ctx, cluster.ConfigSnapshot{
+		Raw:      map[string]any{"kafka": map[string]any{}},
 		Clusters: []cluster.Definition{{Name: "prod", Conn: conn("broken:9092")}},
 	})
-	require.Error(t, err)
-	require.Contains(t, err.Error(), "unreachable")
+	require.NoError(t, err)
+	require.False(t, store.sawValidate(), "Submit must not probe Kafka connectivity")
+	require.True(t, store.sawSave(), "an offline cluster must still be persisted")
 
 	d, _ := res.Lookup("prod")
-	require.Equal(t, []string{"prod:9092"}, d.Conn.BootstrapServers, "rollback: defs must not change")
-	require.Empty(t, life.names(), "rollback: no connection may be invalidated")
-	require.False(t, store.sawSave(), "rollback: a rejected config must never be persisted")
+	require.Equal(t, []string{"broken:9092"}, d.Conn.BootstrapServers)
+	require.Equal(t, []string{"prod"}, life.names(), "the changed connection must be invalidated")
 }
 
-// TestReloaderApplyRollsBackWhenSaveFails proves that a persist failure (after
-// validation passed) also leaves the running state untouched -- disk and
-// runtime stay consistent, both on the old config.
+// TestReloaderApplyRollsBackWhenSaveFails proves that a persist failure leaves
+// the running state untouched -- disk and runtime stay consistent, both on the
+// old config.
 func TestReloaderApplyRollsBackWhenSaveFails(t *testing.T) {
 	res := appcluster.NewResolver([]cluster.Definition{{Name: "prod", Conn: conn("prod:9092")}})
 	life := &recordingLifecycle{}
 	sc := appcluster.NewStateCache(res, &fakeState{}, life, time.Hour)
-	store := &stubConfigStore{saveErr: errors.New("disk full")} // validation passes, Save fails
+	store := &stubConfigStore{saveErr: errors.New("disk full")}
 	rl := appcluster.NewReloader(res, life, sc, store)
 
 	err := rl.Apply(context.Background(), cluster.ConfigSnapshot{
@@ -193,25 +205,6 @@ func TestReloaderApplyRollsBackWhenSaveFails(t *testing.T) {
 	d, _ := res.Lookup("prod")
 	require.Equal(t, []string{"prod:9092"}, d.Conn.BootstrapServers, "save failure must not swap defs")
 	require.Empty(t, life.names(), "save failure must not invalidate any connection")
-}
-
-// TestReloaderApplyPropagatesValidateError proves an infrastructure error from
-// Validate (not a per-cluster verdict) also rolls back.
-func TestReloaderApplyPropagatesValidateError(t *testing.T) {
-	res := appcluster.NewResolver([]cluster.Definition{{Name: "prod"}})
-	life := &recordingLifecycle{}
-	sc := appcluster.NewStateCache(res, &fakeState{}, life, time.Hour)
-	store := &stubConfigStore{validateErr: errors.New("probe wiring boom")}
-	rl := appcluster.NewReloader(res, life, sc, store)
-
-	err := rl.Apply(context.Background(), cluster.ConfigSnapshot{
-		Clusters: []cluster.Definition{{Name: "prod2"}},
-	})
-	require.Error(t, err)
-	require.Contains(t, err.Error(), "boom")
-	_, err = res.Lookup("prod2")
-	require.Error(t, err, "validate error must not swap defs")
-	require.Empty(t, life.names())
 }
 
 // TestReloaderApplyIsSerializedUnderConcurrency fires many concurrent Apply

@@ -332,19 +332,19 @@ func TestRestartWithConfig_MissingConfigIs400(t *testing.T) {
 	require.False(t, fr.applied)
 }
 
-// TestRestartWithConfig_ApplyErrorIs500 proves a reload failure (validation
-// rollback or persist failure) is a 500 with no leaked detail. Not
+// TestRestartWithConfig_ApplyErrorIs500 proves a reload failure (for example,
+// a persist failure) is a 500 with no leaked detail. Not
 // contract-validated (500 undeclared for this op), same convention as the other
 // backend-error-500 tests.
 func TestRestartWithConfig_ApplyErrorIs500(t *testing.T) {
-	fr := &fakeReloader{err: errors.New("new config rejected: cluster \"prod\" kafka unreachable: dial boom")}
+	fr := &fakeReloader{err: errors.New("save config: replace config: permission denied")}
 	srv := newTestServer(withReloader(fr))
 	defer srv.Close()
 
 	_, code, _, body := bodyJSON(t, http.MethodPut, srv, "/api/config",
 		`{"config":{"properties":{"kafka":{"clusters":[{"name":"prod","bootstrapServers":"k:9092"}]}}}}`)
 	require.Equal(t, 500, code)
-	require.NotContains(t, string(body), "dial boom")
+	require.NotContains(t, string(body), "permission denied")
 }
 
 // --- uploadConfigRelatedFile (POST /api/config/relatedfiles) ---

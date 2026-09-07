@@ -1,11 +1,11 @@
 # CLAUDE.md — cy-kaf-client
 
 跨平台本地 Kafka 客户端：React 前端 + Go 后端 + Tauri v2 桌面宿主，共用一份
-OpenAPI 契约（97 个端点，勘误 E1）。桌面端在原生窗口中运行，仅在 loopback 启动
+OpenAPI 契约（100 个端点，勘误 E1）。桌面端在原生窗口中运行，仅在 loopback 启动
 Go sidecar；CLI 与 STDIO MCP server 复用同一后端能力。
 
-当前已完成 ACL、Client Quota、Topic Analysis 与 KSQL 等批准范围；契约矩阵中 92 项已交付，
-Graphs、PrometheusExpose 与登录相关的 5 项保持 `exempt`。设计决策、阶段记录与能力矩阵见
+当前已完成 ACL、Client Quota、Topic Analysis 与 KSQL 等批准范围；契约矩阵中 95 项已交付，
+Graphs、PrometheusExpose 与登录相关的 5 项保持 `exempt`。Settings 配置共享支持 YAML 导入导出、名称或完整地址判重、勾选替换及预览版本检查。设计决策、阶段记录与能力矩阵见
 `docs/superpowers/specs/`、`docs/superpowers/plans/` 和 `docs/parity/feature-matrix.md`。
 
 ## 命令（一切以 make 为入口）

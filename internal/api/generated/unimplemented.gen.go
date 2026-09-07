@@ -373,6 +373,18 @@ func (UnimplementedServer) GetAuthenticationSettings(w http.ResponseWriter, _ *h
 	writeNotImplemented(w)
 }
 
+func (UnimplementedServer) ExportKafkaConfig(w http.ResponseWriter, _ *http.Request) {
+	writeNotImplemented(w)
+}
+
+func (UnimplementedServer) ImportKafkaConfig(w http.ResponseWriter, _ *http.Request) {
+	writeNotImplemented(w)
+}
+
+func (UnimplementedServer) PreviewKafkaConfigImport(w http.ResponseWriter, _ *http.Request) {
+	writeNotImplemented(w)
+}
+
 func (UnimplementedServer) UploadConfigRelatedFile(w http.ResponseWriter, _ *http.Request) {
 	writeNotImplemented(w)
 }

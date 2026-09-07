@@ -2929,6 +2929,118 @@ paths:
           application/json:
             schema:
               $ref: '#/components/schemas/RestartRequest'
+  /api/config/export:
+    get:
+      operationId: exportKafkaConfig
+      summary: Export all Kafka environments as YAML
+      tags: [ApplicationConfig]
+      responses:
+        '200':
+          description: Successful operation
+          content:
+            application/yaml:
+              schema:
+                type: object
+                required: [kafka]
+                properties:
+                  kafka:
+                    type: object
+                    required: [clusters]
+                    properties:
+                      clusters:
+                        type: array
+                        items:
+                          type: object
+        '400':
+          description: Configuration transfer failed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '409':
+          description: Configuration transfer failed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: Configuration transfer failed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+  /api/config/import/preview:
+    post:
+      operationId: previewKafkaConfigImport
+      summary: Validate a YAML file and list all conflicting environments
+      tags: [ApplicationConfig]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ConfigImportFile'
+      responses:
+        '200':
+          description: Successful operation
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ConfigImportPreview'
+        '400':
+          description: Configuration transfer failed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '409':
+          description: Configuration transfer failed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: Configuration transfer failed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+  /api/config/import:
+    post:
+      operationId: importKafkaConfig
+      summary: Import selected environments, replacing reviewed local conflicts
+      tags: [ApplicationConfig]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ConfigImportSelection'
+      responses:
+        '200':
+          description: Successful operation
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ConfigImportResult'
+        '400':
+          description: Configuration transfer failed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '409':
+          description: Configuration transfer failed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: Configuration transfer failed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
   /api/config/authentication:
     get:
       operationId: getAuthenticationSettings
@@ -3163,6 +3275,80 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/OAuthProvider'
+    ConfigImportFile:
+      type: object
+      additionalProperties: false
+      required: [content]
+      properties:
+        content:
+          type: string
+          description: A single YAML document containing kafka.clusters
+    ConfigImportSelection:
+      type: object
+      additionalProperties: false
+      required: [content, selected, revision]
+      properties:
+        content:
+          type: string
+        selected:
+          type: array
+          uniqueItems: true
+          items:
+            type: integer
+            minimum: 0
+        revision:
+          type: string
+    ConfigImportConflict:
+      type: object
+      required: [name, bootstrapServers, reason]
+      properties:
+        name:
+          type: string
+        bootstrapServers:
+          type: string
+        reason:
+          type: string
+          enum: [name, address, name_and_address]
+    ConfigImportEntry:
+      type: object
+      required: [index, name, bootstrapServers, conflicts, overlaps]
+      properties:
+        index:
+          type: integer
+        name:
+          type: string
+        bootstrapServers:
+          type: string
+        conflicts:
+          type: array
+          items:
+            $ref: '#/components/schemas/ConfigImportConflict'
+        overlaps:
+          type: array
+          description: Indices of incoming entries that cannot be selected together
+          items:
+            type: integer
+    ConfigImportPreview:
+      type: object
+      required: [revision, entries]
+      properties:
+        revision:
+          type: string
+        entries:
+          type: array
+          items:
+            $ref: '#/components/schemas/ConfigImportEntry'
+    ConfigImportResult:
+      type: object
+      required: [added, replaced, skipped]
+      properties:
+        added:
+          type: integer
+        replaced:
+          type: integer
+          description: Number of local environments replaced
+        skipped:
+          type: integer
     ApplicationConfig:
       type: object
       required:

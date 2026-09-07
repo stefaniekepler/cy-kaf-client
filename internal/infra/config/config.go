@@ -85,7 +85,14 @@ type KsqlSSLCfg struct {
 	KeystorePassword   string `yaml:"keystorePassword"`
 }
 
+type KafkaSSLCfg struct {
+	TruststoreLocation string `yaml:"truststoreLocation"`
+	TruststorePassword string `yaml:"truststorePassword"`
+	Verify             *bool  `yaml:"verify"`
+}
+
 type ClusterCfg struct {
+	SSL              *KafkaSSLCfg   `yaml:"ssl"`
 	Name             string         `yaml:"name"`
 	BootstrapServers string         `yaml:"bootstrapServers"`
 	ReadOnly         bool           `yaml:"readOnly"`
@@ -229,6 +236,17 @@ func (c ClusterCfg) ToDomain() (cluster.Definition, error) {
 		}
 	}
 	sec := stringifyProps(c.Properties)
+	if c.SSL != nil {
+		if c.SSL.TruststoreLocation != "" {
+			sec["ssl.truststore.location"] = c.SSL.TruststoreLocation
+		}
+		if c.SSL.TruststorePassword != "" {
+			sec["ssl.truststore.password"] = c.SSL.TruststorePassword
+		}
+		if c.SSL.Verify != nil && !*c.SSL.Verify {
+			sec["ssl.endpoint.identification.algorithm"] = ""
+		}
+	}
 	connects := make([]cluster.ConnectSpec, 0, len(c.KafkaConnect))
 	for _, kc := range c.KafkaConnect {
 		cs := cluster.ConnectSpec{Name: kc.Name, Address: kc.Address}
