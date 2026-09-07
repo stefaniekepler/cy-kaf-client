@@ -28,8 +28,9 @@ type publishOptions struct {
 type commandRunner func(args ...string) ([]byte, error)
 
 type releaseState struct {
-	Draft      bool `json:"draft"`
-	Prerelease bool `json:"prerelease"`
+	TagName    string `json:"tag_name"`
+	Draft      bool   `json:"draft"`
+	Prerelease bool   `json:"prerelease"`
 	Assets     []struct {
 		Name   string `json:"name"`
 		Digest string `json:"digest"`
@@ -123,15 +124,24 @@ func publish(run commandRunner, opts publishOptions) error {
 }
 
 func getRelease(run commandRunner, tag string) (releaseState, bool, error) {
-	output, err := run("api", "repos/"+fixedRepository+"/releases/tags/"+tag)
+	// The by-tag endpoint only returns published releases. Authenticated listing
+	// includes drafts, which must remain discoverable throughout publication.
+	output, err := run("api", "repos/"+fixedRepository+"/releases?per_page=100", "--paginate", "--slurp")
 	if err != nil {
-		return releaseState{}, false, nil
+		return releaseState{}, false, fmt.Errorf("list releases: %w", err)
 	}
-	var state releaseState
-	if err := json.Unmarshal(output, &state); err != nil {
+	var pages [][]releaseState
+	if err := json.Unmarshal(output, &pages); err != nil {
 		return releaseState{}, false, fmt.Errorf("decode release state: %w", err)
 	}
-	return state, true, nil
+	for _, page := range pages {
+		for _, state := range page {
+			if state.TagName == tag {
+				return state, true, nil
+			}
+		}
+	}
+	return releaseState{}, false, nil
 }
 
 func localAssets(directory string) (map[string]string, []string, error) {

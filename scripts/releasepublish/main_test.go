@@ -22,7 +22,7 @@ func (fake *fakeGitHub) run(args ...string) ([]byte, error) {
 	fake.commands = append(fake.commands, strings.Join(args, " "))
 	if args[0] == "api" {
 		if !fake.exists {
-			return nil, fmt.Errorf("not found")
+			return []byte(`[[]]`), nil
 		}
 		if len(fake.assets) > 0 {
 			fake.verified = true
@@ -31,7 +31,7 @@ func (fake *fakeGitHub) run(args ...string) ([]byte, error) {
 		for name, digest := range fake.assets {
 			items = append(items, fmt.Sprintf(`{"name":%q,"digest":%q}`, name, digest))
 		}
-		return []byte(fmt.Sprintf(`{"draft":%t,"prerelease":false,"assets":[%s]}`, fake.draft, strings.Join(items, ","))), nil
+		return []byte(fmt.Sprintf(`[[{"tag_name":"v1.2.3","draft":%t,"prerelease":false,"assets":[%s]}]]`, fake.draft, strings.Join(items, ","))), nil
 	}
 	if len(args) >= 3 && args[0] == "release" && args[1] == "create" {
 		fake.exists, fake.draft = true, true
@@ -123,6 +123,39 @@ func TestPublishCompletesExistingDraft(t *testing.T) {
 	}
 	if fake.draft {
 		t.Fatal("verified draft was not published")
+	}
+}
+
+func TestGetReleaseFindsDraftOnLaterPage(t *testing.T) {
+	run := func(args ...string) ([]byte, error) {
+		if strings.Contains(strings.Join(args, " "), "/releases/tags/") {
+			return nil, fmt.Errorf("published release not found (HTTP 404)")
+		}
+		return []byte(`[[{"tag_name":"v1.2.4","draft":false}],[{"tag_name":"v1.2.3","draft":true,"assets":[]}]]`), nil
+	}
+	state, exists, err := getRelease(run, "v1.2.3")
+	if err != nil || !exists || !state.Draft {
+		t.Fatalf("draft lookup: state=%+v exists=%t err=%v", state, exists, err)
+	}
+}
+
+func TestGetReleasePropagatesLookupFailure(t *testing.T) {
+	run := func(_ ...string) ([]byte, error) {
+		return nil, fmt.Errorf("request timeout")
+	}
+	_, exists, err := getRelease(run, "v1.2.3")
+	if err == nil || exists {
+		t.Fatalf("lookup failure must not become absence: exists=%t err=%v", exists, err)
+	}
+}
+
+func TestGetReleaseIgnoresOtherTags(t *testing.T) {
+	run := func(_ ...string) ([]byte, error) {
+		return []byte(`[[{"tag_name":"v1.2.30","draft":true}]]`), nil
+	}
+	_, exists, err := getRelease(run, "v1.2.3")
+	if err != nil || exists {
+		t.Fatalf("unexpected tag match: exists=%t err=%v", exists, err)
 	}
 }
 
