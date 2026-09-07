@@ -14,6 +14,7 @@ import {
 
 import * as S from './SettingsModal.styled';
 import ConfigTransferSection from './ConfigTransferSection';
+import UpdateSection from './UpdateSection';
 
 type Props = {
   isOpen: boolean;
@@ -319,6 +320,7 @@ const SettingsModal: React.FC<Props> = ({ isOpen, onClose, triggerRef }) => {
       >
         <S.Content>
           <ConfigTransferSection />
+          <UpdateSection active={isOpen} />
           <S.Section>
             <S.SectionHeading>MCP</S.SectionHeading>
             {settingsQuery.isLoading && <p>Loading MCP settings...</p>}

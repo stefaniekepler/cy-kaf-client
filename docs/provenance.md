@@ -65,3 +65,6 @@
 
 | 2026-09-07 | `frontend/src/components/Settings/ConfigTransferSection*`、`SettingsModal.tsx` 及相关测试、`frontend/src/lib/hooks/api/configTransfer.ts`、`e2e/src/tests/config-transfer.spec.ts`、`e2e/src/playwright.config.ts`、`desktop/src-tauri/src/{lib,downloads}.rs`、`scripts/desktop-smoke.sh` | Settings 增加 YAML 环境配置导入导出、完整文件校验、名称或完整地址冲突选择与显式替换；桌面端仅放行当前 sidecar 的配置 blob 下载并避免覆盖已有文件 | 用户批准的团队环境共享功能；保留本机非环境设置与原始扩展字段，凭据按原配置格式导出，证书文件不打包；前端修改属于本地运行时扩展 |
 | 2026-09-07 | `frontend/src/components/common/Alert/**`、`frontend/src/widgets/ClusterConfigForm/utils/**`、`frontend/src/lib/hooks/api/__tests__/appConfig.spec.ts` | Kafka 验证失败使用中文标题并按多行呈现诊断，补充显式验证与配置保存分离的回归测试 | 配合连接诊断与离线环境保存，测试使用文档地址；不改变实际 Kafka 鉴权或证书校验 |
+
+| 2026-09-07 | `frontend/src/components/Settings/{SettingsModal,UpdateSection}.tsx`、`frontend/src/lib/hooks/api/desktopUpdates.ts` 及对应测试、`desktop/src-tauri/src/updates/**` | 增加仅桌面可见的 Settings 更新状态与固定原生动作；后台限速下载和签名校验，明确确认后重启或预约下次启动，UI 更新不刷新页面、不抢焦点 | 用户明确批准自动更新方案并要求检查、下载无干扰；不通过 Kafka API 执行更新，不修改环境配置，不在普通关闭时安装 |
+| 2026-09-07 | `desktop/vendor/tauri-plugin-updater/**`、`NOTICE`、`desktop/src-tauri/Cargo.toml` | 固定并保留官方 updater 2.11.0 源码与许可证，唯一行为补丁为实际 manifest 响应在 JSON 解析前限制为 128 KiB | 原插件直接无界读取 JSON，独立预检无法限制实际消费的响应；来源提交、原文件哈希及补丁范围记录在 `VENDORED.md`，实际 HTTP 回归和安全复核通过 |

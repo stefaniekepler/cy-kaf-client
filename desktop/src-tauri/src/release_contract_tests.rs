@@ -1,4 +1,4 @@
-use std::{fs, path::PathBuf};
+use std::{fs, path::PathBuf, process::Command};
 
 fn repository_root() -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR"))
@@ -42,7 +42,7 @@ fn workflow_declares_all_six_native_desktop_targets() {
 }
 
 #[test]
-fn release_requires_six_installers_and_one_checksum_file() {
+fn release_requires_six_installers_updater_payloads_and_one_checksum_file() {
     let workflow = repository_file(".github/workflows/ci.yml");
 
     for suffix in [
@@ -54,13 +54,97 @@ fn release_requires_six_installers_and_one_checksum_file() {
         "linux-aarch64.AppImage",
     ] {
         assert!(workflow.contains(suffix), "missing {suffix}");
+    }
+    for suffix in [
+        "macos-x86_64.app.tar.gz",
+        "macos-aarch64.app.tar.gz",
+        "windows-x86_64-setup.exe.sig",
+        "windows-aarch64-setup.exe.sig",
+        "linux-x86_64.AppImage.sig",
+        "linux-aarch64.AppImage.sig",
+    ] {
+        assert!(workflow.contains(suffix), "missing {suffix}");
+    }
+    assert!(workflow.contains("latest.json"));
+    assert!(workflow.contains("sha256sum -c SHA256SUMS.txt"));
+    // All three native signing steps must explicitly pass even an empty
+    // password, otherwise Tauri attempts an interactive terminal prompt in CI.
+    assert_eq!(
+        workflow
+            .matches("TAURI_SIGNING_PRIVATE_KEY_PASSWORD:")
+            .count(),
+        3
+    );
+}
+
+#[test]
+fn updater_manifest_command_reads_real_signature_contents_for_all_targets() {
+    let temp = tempfile::tempdir().expect("temp artifact directory");
+    let version = "1.2.3";
+    let artifacts = [
+        "macos-x86_64.app.tar.gz",
+        "macos-aarch64.app.tar.gz",
+        "windows-x86_64-setup.exe",
+        "windows-aarch64-setup.exe",
+        "linux-x86_64.AppImage",
+        "linux-aarch64.AppImage",
+    ];
+    for (index, suffix) in artifacts.iter().enumerate() {
+        let artifact = temp.path().join(format!("Cy-KafClient_{version}_{suffix}"));
+        fs::write(&artifact, format!("package-{index}")).expect("write package fixture");
+        fs::write(
+            artifact.with_file_name(format!(
+                "{}.sig",
+                artifact.file_name().unwrap().to_string_lossy()
+            )),
+            format!("real-signature-{index}\n"),
+        )
+        .expect("write signature fixture");
+    }
+    let output = temp.path().join("latest.json");
+    let status = Command::new("go")
+        .current_dir(repository_root())
+        .args([
+            "run",
+            "./scripts/updatermanifest",
+            "-dir",
+            temp.path().to_str().unwrap(),
+            "-version",
+            version,
+            "-tag",
+            "v1.2.3",
+            "-notes",
+            "release notes",
+            "-pub-date",
+            "2026-09-07T08:09:10Z",
+            "-output",
+            output.to_str().unwrap(),
+        ])
+        .status()
+        .expect("run updater manifest helper");
+    assert!(status.success());
+
+    let manifest: serde_json::Value =
+        serde_json::from_slice(&fs::read(output).expect("read generated manifest"))
+            .expect("parse generated manifest");
+    let platforms = manifest["platforms"].as_object().expect("platform map");
+    assert_eq!(platforms.len(), 6);
+    for (index, target) in [
+        "darwin-x86_64",
+        "darwin-aarch64",
+        "windows-x86_64",
+        "windows-aarch64",
+        "linux-x86_64",
+        "linux-aarch64",
+    ]
+    .iter()
+    .enumerate()
+    {
         assert_eq!(
-            workflow.matches(suffix).count(),
-            2,
-            "{suffix} must appear in both release allowlists"
+            platforms[*target]["signature"],
+            format!("real-signature-{index}")
         );
     }
-    assert!(workflow.contains("\"SHA256SUMS.txt\""));
 }
 
 #[test]

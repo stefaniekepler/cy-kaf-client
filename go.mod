@@ -3,6 +3,7 @@ module github.com/cy-kaf/cy-kaf-client
 go 1.26.4
 
 require (
+	aead.dev/minisign v0.3.0
 	github.com/antlr4-go/antlr/v4 v4.13.1
 	github.com/getkin/kin-openapi v0.140.0
 	github.com/go-chi/chi/v5 v5.3.0

@@ -248,7 +248,7 @@ jobs:
             -commit "${commit}" \
             -build-time "${build_time}"
       - name: Build macOS native package
-        if: matrix.smoke == 'macos'
+        if: matrix.smoke == 'macos' && needs.version-check.outputs.is_release != 'true'
         working-directory: desktop
         shell: bash
         env:
@@ -258,22 +258,64 @@ jobs:
             --target "${{ matrix.target }}" \
             --bundles "${{ matrix.bundles }}" \
             --config '{"bundle":{"macOS":{"minimumSystemVersion":"${{ matrix.macos_min }}"}}}'
+      - name: Build signed macOS native package and updater artifact
+        if: matrix.smoke == 'macos' && needs.version-check.outputs.is_release == 'true'
+        working-directory: desktop
+        shell: bash
+        env:
+          MACOSX_DEPLOYMENT_TARGET: ${{ matrix.macos_min }}
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+        run: |
+          test -n "${TAURI_SIGNING_PRIVATE_KEY}"
+          cargo tauri build \
+            --target "${{ matrix.target }}" \
+            --bundles "${{ matrix.bundles }}" \
+            --config '{"bundle":{"createUpdaterArtifacts":true,"macOS":{"minimumSystemVersion":"${{ matrix.macos_min }}"}}}'
       - name: Build Windows native package
-        if: matrix.smoke == 'windows'
+        if: matrix.smoke == 'windows' && needs.version-check.outputs.is_release != 'true'
         working-directory: desktop
         shell: pwsh
         run: >-
           cargo tauri build
           --target "${{ matrix.target }}"
           --bundles "${{ matrix.bundles }}"
+      - name: Build signed Windows native package and updater artifact
+        if: matrix.smoke == 'windows' && needs.version-check.outputs.is_release == 'true'
+        working-directory: desktop
+        shell: pwsh
+        env:
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+        run: |
+          if ([string]::IsNullOrWhiteSpace($env:TAURI_SIGNING_PRIVATE_KEY)) {
+            throw "TAURI_SIGNING_PRIVATE_KEY is required for release builds"
+          }
+          cargo tauri build `
+            --target "${{ matrix.target }}" `
+            --bundles "${{ matrix.bundles }}" `
+            --config '{"bundle":{"createUpdaterArtifacts":true}}'
       - name: Build Linux native package
-        if: matrix.smoke == 'linux'
+        if: matrix.smoke == 'linux' && needs.version-check.outputs.is_release != 'true'
         working-directory: desktop
         shell: bash
         run: >-
           cargo tauri build
           --target "${{ matrix.target }}"
           --bundles "${{ matrix.bundles }}"
+      - name: Build signed Linux native package and updater artifact
+        if: matrix.smoke == 'linux' && needs.version-check.outputs.is_release == 'true'
+        working-directory: desktop
+        shell: bash
+        env:
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+        run: |
+          test -n "${TAURI_SIGNING_PRIVATE_KEY}"
+          cargo tauri build \
+            --target "${{ matrix.target }}" \
+            --bundles "${{ matrix.bundles }}" \
+            --config '{"bundle":{"createUpdaterArtifacts":true}}'
       - name: Smoke macOS desktop executable
         if: matrix.smoke == 'macos'
         shell: bash
@@ -327,6 +369,21 @@ jobs:
           mkdir -p release-assets
           cp "${installer}" \
             "release-assets/Cy-KafClient_${{ needs.version-check.outputs.version }}_${{ matrix.asset }}.dmg"
+      - name: Normalize signed macOS updater artifact
+        if: matrix.smoke == 'macos' && needs.version-check.outputs.is_release == 'true'
+        shell: bash
+        run: |
+          updater_dir="desktop/src-tauri/target/${{ matrix.target }}/release/bundle/macos"
+          updater_count="$(find "${updater_dir}" -maxdepth 1 -type f -name '*.app.tar.gz' | wc -l | tr -d ' ')"
+          if [ "${updater_count}" -ne 1 ]; then
+            echo "expected exactly one macOS updater artifact, found ${updater_count}" >&2
+            exit 1
+          fi
+          updater="$(find "${updater_dir}" -maxdepth 1 -type f -name '*.app.tar.gz' -print -quit)"
+          test -s "${updater}.sig"
+          updater_name="Cy-KafClient_${{ needs.version-check.outputs.version }}_${{ matrix.asset }}.app.tar.gz"
+          cp "${updater}" "release-assets/${updater_name}"
+          cp "${updater}.sig" "release-assets/${updater_name}.sig"
       - name: Normalize Windows release asset
         if: matrix.smoke == 'windows'
         shell: pwsh
@@ -342,6 +399,15 @@ jobs:
           Copy-Item `
             $Installers[0].FullName `
             "release-assets/Cy-KafClient_${{ needs.version-check.outputs.version }}_${{ matrix.asset }}-setup.exe"
+          if ('${{ needs.version-check.outputs.is_release }}' -eq 'true') {
+            $Signature = $Installers[0].FullName + '.sig'
+            if (!(Test-Path $Signature) -or (Get-Item $Signature).Length -eq 0) {
+              throw "missing or empty updater signature for $($Installers[0].Name)"
+            }
+            Copy-Item `
+              $Signature `
+              "release-assets/Cy-KafClient_${{ needs.version-check.outputs.version }}_${{ matrix.asset }}-setup.exe.sig"
+          }
       - name: Normalize Linux release asset
         if: matrix.smoke == 'linux'
         shell: bash
@@ -356,6 +422,11 @@ jobs:
           mkdir -p release-assets
           cp "${appimage}" \
             "release-assets/Cy-KafClient_${{ needs.version-check.outputs.version }}_${{ matrix.asset }}.AppImage"
+          if [ "${{ needs.version-check.outputs.is_release }}" = true ]; then
+            test -s "${appimage}.sig"
+            cp "${appimage}.sig" \
+              "release-assets/Cy-KafClient_${{ needs.version-check.outputs.version }}_${{ matrix.asset }}.AppImage.sig"
+          fi
       - name: Upload normalized release asset
         uses: actions/upload-artifact@v4
         with:
@@ -400,16 +471,44 @@ jobs:
           pattern: release-*
           path: release-assets
           merge-multiple: true
+      - uses: actions/setup-go@v6
+        with:
+          go-version: "1.26"
+      - name: Verify signed updater artifacts and create manifest
+        shell: bash
+        run: |
+          go run ./scripts/updaterverify \
+            -dir release-assets \
+            -version "${RELEASE_VERSION}" \
+            -tauri-config desktop/src-tauri/tauri.conf.json
+          release_notes="$(git log -1 --pretty=%s)"
+          publication_date="$(git show -s --format=%cI HEAD)"
+          go run ./scripts/updatermanifest \
+            -dir release-assets \
+            -version "${RELEASE_VERSION}" \
+            -tag "${RELEASE_TAG}" \
+            -notes "${release_notes}" \
+            -pub-date "${publication_date}" \
+            -output release-assets/latest.json
       - name: Verify release assets and create checksums
         shell: bash
         run: |
           expected=(
             "Cy-KafClient_${RELEASE_VERSION}_macos-x86_64.dmg"
             "Cy-KafClient_${RELEASE_VERSION}_macos-aarch64.dmg"
+            "Cy-KafClient_${RELEASE_VERSION}_macos-x86_64.app.tar.gz"
+            "Cy-KafClient_${RELEASE_VERSION}_macos-x86_64.app.tar.gz.sig"
+            "Cy-KafClient_${RELEASE_VERSION}_macos-aarch64.app.tar.gz"
+            "Cy-KafClient_${RELEASE_VERSION}_macos-aarch64.app.tar.gz.sig"
             "Cy-KafClient_${RELEASE_VERSION}_windows-x86_64-setup.exe"
+            "Cy-KafClient_${RELEASE_VERSION}_windows-x86_64-setup.exe.sig"
             "Cy-KafClient_${RELEASE_VERSION}_windows-aarch64-setup.exe"
+            "Cy-KafClient_${RELEASE_VERSION}_windows-aarch64-setup.exe.sig"
             "Cy-KafClient_${RELEASE_VERSION}_linux-x86_64.AppImage"
+            "Cy-KafClient_${RELEASE_VERSION}_linux-x86_64.AppImage.sig"
             "Cy-KafClient_${RELEASE_VERSION}_linux-aarch64.AppImage"
+            "Cy-KafClient_${RELEASE_VERSION}_linux-aarch64.AppImage.sig"
+            "latest.json"
           )
           actual_count="$(find release-assets -maxdepth 1 -type f | wc -l | tr -d ' ')"
           if [ "${actual_count}" -ne "${#expected[@]}" ]; then
@@ -431,70 +530,33 @@ jobs:
       - name: Publish GitHub Release
         shell: bash
         run: |
-          notice_end='<!-- cy-kaf-client-release-notice:end -->'
-          notice=$'<!-- cy-kaf-client-release-notice:start -->\nThese packages are unsigned. macOS may require an explicit Gatekeeper approval, and Windows may show a SmartScreen warning. Verify downloads with SHA256SUMS.txt before installation.\n\nCompatibility:\n- macOS Intel: macOS 13 or later\n- macOS Apple Silicon: macOS 12 or later\n- Windows x64: Windows 10 or 11\n- Windows ARM64: Windows 11 on ARM\n- Linux x86_64: 64-bit x86 Linux (Ubuntu 24.04 build baseline)\n- Linux ARM64: 64-bit ARM Linux (Ubuntu 24.04 build baseline)\n\nLinux AppImages may require `chmod +x` and FUSE 2. When FUSE is unavailable, set `APPIMAGE_EXTRACT_AND_RUN=1`. A compatible graphical session and WebKitGTK runtime are required.\n<!-- cy-kaf-client-release-notice:end -->'
-          expected=(
-            "Cy-KafClient_${RELEASE_VERSION}_macos-x86_64.dmg"
-            "Cy-KafClient_${RELEASE_VERSION}_macos-aarch64.dmg"
-            "Cy-KafClient_${RELEASE_VERSION}_windows-x86_64-setup.exe"
-            "Cy-KafClient_${RELEASE_VERSION}_windows-aarch64-setup.exe"
-            "Cy-KafClient_${RELEASE_VERSION}_linux-x86_64.AppImage"
-            "Cy-KafClient_${RELEASE_VERSION}_linux-aarch64.AppImage"
-            "SHA256SUMS.txt"
-          )
-          if gh release view "${RELEASE_TAG}" >/dev/null 2>&1; then
-            while IFS= read -r asset; do
-              keep=false
-              for expected_asset in "${expected[@]}"; do
-                if [ "${asset}" = "${expected_asset}" ]; then
-                  keep=true
-                  break
-                fi
-              done
-              if [ "${keep}" = false ]; then
-                gh release delete-asset "${RELEASE_TAG}" "${asset}" --yes
-              fi
-            done < <(gh release view "${RELEASE_TAG}" --json assets --jq '.assets[].name')
-            existing_body="$(gh release view "${RELEASE_TAG}" --json body --jq '.body')"
-            if [[ "${existing_body}" == *"${notice_end}"* ]]; then
-              generated_notes="${existing_body#*"${notice_end}"}"
-            else
-              generated_notes="${existing_body}"
-            fi
-            while [[ "${generated_notes}" == $'\n'* || "${generated_notes}" == $'\r'* ]]; do
-              generated_notes="${generated_notes:1}"
-            done
-            body="${notice}"
-            if [ -n "${generated_notes}" ]; then
-              body="${body}"$'\n\n'"${generated_notes}"
-            fi
-            gh release upload "${RELEASE_TAG}" release-assets/* --clobber
-            gh release edit "${RELEASE_TAG}" \
-              --title "Cy-KafClient ${RELEASE_TAG}" \
-              --notes "${body}" \
-              --draft=false \
-              --prerelease=false
-          else
-            gh release create "${RELEASE_TAG}" release-assets/* \
-              --verify-tag \
-              --title "Cy-KafClient ${RELEASE_TAG}" \
-              --generate-notes \
-              --notes "${notice}"
-          fi
-          actual="$(gh release view "${RELEASE_TAG}" --json assets --jq '.assets[].name' | sort)"
-          wanted="$(printf '%s\n' "${expected[@]}" | sort)"
-          if [ "${actual}" != "${wanted}" ]; then
-            echo "published release assets do not match expected set" >&2
-            diff <(printf '%s\n' "${wanted}") <(printf '%s\n' "${actual}") || true
-            exit 1
-          fi
-          release_state="$(gh release view "${RELEASE_TAG}" \
-            --json isDraft,isPrerelease \
-            --jq '[.isDraft, .isPrerelease] | @tsv')"
-          if [ "${release_state}" != $'false\tfalse' ]; then
-            echo "release is not a public final release: ${release_state}" >&2
-            exit 1
-          fi
+          notes_file="${RUNNER_TEMP}/cy-kaf-client-release-notes.md"
+          cat > "${notes_file}" <<'EOF'
+          <!-- cy-kaf-client-release-notice:start -->
+          Desktop updates:
+          - Background checks and rate-limited downloads keep the current window and operations running. Update status appears only in Settings.
+          - Install after explicit confirmation and restart, or schedule installation for the next launch. Ordinary window close does not install updates.
+          - Updater packages are signature-verified. Installation is deferred while another process is using the application.
+          - Versions 0.1.2 and earlier require one manual installation of this first updater-enabled release.
+
+          Packages do not have Apple/Windows operating-system code signing. macOS may require an explicit Gatekeeper approval, and Windows may show a SmartScreen warning. Updater signatures verify update packages but do not remove those OS prompts. Verify downloads with SHA256SUMS.txt before installation.
+
+          Compatibility:
+          - macOS Intel: macOS 13 or later
+          - macOS Apple Silicon: macOS 12 or later
+          - Windows x64: Windows 10 or 11
+          - Windows ARM64: Windows 11 on ARM
+          - Linux x86_64: 64-bit x86 Linux (Ubuntu 24.04 build baseline)
+          - Linux ARM64: 64-bit ARM Linux (Ubuntu 24.04 build baseline)
+
+          Linux AppImages may require `chmod +x` and FUSE 2. When FUSE is unavailable, set `APPIMAGE_EXTRACT_AND_RUN=1`. A compatible graphical session and WebKitGTK runtime are required.
+          <!-- cy-kaf-client-release-notice:end -->
+          EOF
+          go run ./scripts/releasepublish \
+            -tag "${RELEASE_TAG}" \
+            -assets-dir release-assets \
+            -title "Cy-KafClient ${RELEASE_TAG}" \
+            -notes-file "${notes_file}"
 
 # 说明：CI 的 build-matrix 用空 webui/static 出"无前端"工件做编译门禁；
 # 含前端的完整产物由 desktop-package 在原生 runner 上构建。

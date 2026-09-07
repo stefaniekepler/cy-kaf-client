@@ -78,6 +78,7 @@ describe('SettingsModal', () => {
   });
 
   beforeEach(() => {
+    Reflect.deleteProperty(window, '__CY_KAF_DESKTOP_UPDATES__');
     settingsState = {
       available: true,
       settings: { enabled: true, allowWrites: false },
@@ -175,6 +176,39 @@ describe('SettingsModal', () => {
     expect(updateSettings).not.toHaveBeenCalled();
     expect(configureClient).not.toHaveBeenCalled();
     expect(locationAssign).not.toHaveBeenCalled();
+  });
+
+  it('keeps the focused Settings control unchanged during update progress', () => {
+    Object.defineProperty(window, '__CY_KAF_DESKTOP_UPDATES__', {
+      configurable: true,
+      value: true,
+    });
+    renderModal();
+    locationAssign.mockClear();
+    const mcpSwitch = screen.getByRole('checkbox', { name: 'Enable MCP' });
+    mcpSwitch.focus();
+
+    act(() => {
+      window.dispatchEvent(
+        new CustomEvent('cy-kaf-update-status', {
+          detail: {
+            available: true,
+            currentVersion: '1.2.3',
+            status: 'downloading',
+            version: '1.3.0',
+            downloadedBytes: 256,
+            totalBytes: 1024,
+            scheduled: false,
+          },
+        })
+      );
+    });
+
+    expect(mcpSwitch).toBeChecked();
+    expect(mcpSwitch).toHaveFocus();
+    expect(screen.getByText('Downloading update: 25%')).toBeVisible();
+    expect(locationAssign).not.toHaveBeenCalled();
+    expect(updateSettings).not.toHaveBeenCalled();
   });
 
   it('enables MCP with the read-only policy and persists write and MCP disablement immediately', async () => {

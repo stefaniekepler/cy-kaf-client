@@ -26,8 +26,9 @@ Go sidecar；CLI 与 MCP server 复用同一套后端能力。
 | Linux x86_64 | 64-bit x86 Linux，Ubuntu 24.04 构建基线 | `Cy-KafClient_<版本>_linux-x86_64.AppImage` |
 | Linux ARM64 | 64-bit ARM Linux，Ubuntu 24.04 构建基线 | `Cy-KafClient_<版本>_linux-aarch64.AppImage` |
 
-发布包暂未进行代码签名，因此 macOS Gatekeeper 或 Windows SmartScreen
-可能显示安全提示。Linux AppImage 可能需要先执行 `chmod +x <文件名>`，运行时需要
+安装包暂未进行操作系统代码签名，因此 macOS Gatekeeper 或 Windows SmartScreen
+可能显示安全提示。应用内更新包使用独立的 Tauri updater 密钥签名；这类签名只用于
+验证更新包完整性，不能消除操作系统的安装提示。Linux AppImage 可能需要先执行 `chmod +x <文件名>`，运行时需要
 FUSE 2、兼容的图形会话和 WebKitGTK；无法使用 FUSE 时可设置
 `APPIMAGE_EXTRACT_AND_RUN=1`。安装或运行前请用 Release 中的 `SHA256SUMS.txt`
 校验下载文件。
@@ -60,7 +61,26 @@ make desktop-package \
 ```
 
 维护者创建并推送与应用版本一致的 `vX.Y.Z` 标签后，CI 会在六个原生 runner
-完成构建、安装冒烟测试和 Release 发布。
+完成构建和安装冒烟测试。所有平台通过后，CI 使用应用嵌入的公钥逐一验证六份 updater 包的签名，生成
+`latest.json` 和覆盖全部发布文件的 `SHA256SUMS.txt`，再将安装包、更新包、签名与
+manifest 一起上传到 draft Release；远端文件名和 SHA-256 全部复核通过后才公开。
+已经公开的同名 Release 只允许内容完全一致的幂等重跑，禁止覆盖可变 updater 产物。
+普通分支和 Pull Request 构建不会读取签名密钥，也不会生成 updater 包。
+
+updater 使用专用密钥，不应复用 Apple 或 Windows 代码签名证书。维护者应在受控的离线
+环境用 Tauri signer 生成一次密钥对，将私钥原文保存到 GitHub Actions repository secret
+`TAURI_SIGNING_PRIVATE_KEY`，并将公钥写入应用 updater 配置。如私钥设有口令，另外配置
+`TAURI_SIGNING_PRIVATE_KEY_PASSWORD`；CI 对无口令私钥也显式传入空口令，避免签名工具尝试交互读取。私钥不得提交到仓库、构建
+产物或 Release；丢失私钥后，已安装版本无法验证新密钥签发的更新。基础
+`tauri.conf.json` 保持 `createUpdaterArtifacts: false`，只有标签发布任务通过命令行配置
+overlay 开启签名产物。当前 `0.1.2` 及更早版本不包含 updater，需要手动安装一次带 updater
+的新版本，之后才可在 Settings 中接收应用内更新。
+
+后台检查和下载不会抢占输入焦点、刷新窗口、停止 sidecar、执行 Kafka 操作或自动安装；
+首次自动检查在界面就绪 60 秒后进行，没有待安装更新时每 6 小时检查；仅一个下载任务运行，限速 512 KiB/s，进度通知最多每秒一次。状态只显示在 Settings 内。
+下载完成后仍需用户明确确认“更新并重启”，或明确安排在下次启动时安装。普通关闭应用不会
+触发安装，离线、签名无效或缓存损坏时会继续启动当前版本。安装前会检测其他正在使用同一程序的客户端或 MCP 进程；发现占用时延后安装，不终止外部进程。
+“下次启动安装”只在启动 Go sidecar 前尝试，联网复核限时 5 秒，失败不会在本次使用过程中再次自动安装。
 
 桌面客户端默认读取：
 

@@ -152,12 +152,14 @@ on run argv
     tell first application process whose unix id is targetPid
       set elementsList to get entire contents of window 1
       repeat with itemRef in elementsList
-        if role of itemRef is "AXButton" then
-          if name of itemRef is targetLabel or description of itemRef is targetLabel then
-            perform action "AXPress" of itemRef
-            return "clicked"
+        try
+          if role of itemRef is "AXButton" and enabled of itemRef then
+            if name of itemRef is targetLabel or description of itemRef is targetLabel then
+              perform action "AXPress" of itemRef
+              return "clicked"
+            end if
           end if
-        end if
+        end try
       end repeat
     end tell
   end tell
@@ -171,6 +173,25 @@ config_export_count() {
 import pathlib, sys
 print(len(list(pathlib.Path(sys.argv[1]).glob("kafka-environments-*.yaml"))))
 PYCOUNT
+}
+
+web_text_is_visible() {
+  osascript - "$shell_pid" "$1" <<'APPLESCRIPT'
+on run argv
+  set targetPid to item 1 of argv as integer
+  set targetText to item 2 of argv
+  tell application "System Events"
+    tell first application process whose unix id is targetPid
+      repeat with itemRef in (get entire contents of window 1)
+        if role of itemRef is "AXStaticText" then
+          if value of itemRef is targetText then return "visible"
+        end if
+      end repeat
+    end tell
+  end tell
+  error "requested text is not visible"
+end run
+APPLESCRIPT
 }
 
 printf 'kafka:\n  clusters: []\n' >"$config_path"
@@ -232,6 +253,30 @@ for _ in $(seq 1 30); do
   sleep 0.5
 done
 [[ -n "$settings_ready" ]] || fail "Settings did not become available"
+
+# Test mode performs a deterministic no-update check and cannot contact the
+# production updater or install anything. Exercise the real navigation bridge.
+update_check_ready=""
+for _ in $(seq 1 30); do
+  if click_web_button "Check for updates" >/dev/null 2>&1; then
+    update_check_ready=1
+    break
+  fi
+  sleep 0.5
+done
+[[ -n "$update_check_ready" ]] || fail "update check button is unavailable"
+update_checked=""
+for _ in $(seq 1 30); do
+  if web_text_is_visible "You are up to date." >/dev/null 2>&1; then
+    update_checked=1
+    break
+  fi
+  sleep 0.5
+done
+[[ -n "$update_checked" ]] || fail "update status did not cross the native bridge"
+process_is_running "$shell_pid" || fail "update check stopped the shell"
+process_is_running "$sidecar_pid" || fail "update check restarted the sidecar"
+lsof -nP -a -p "$sidecar_pid" -iTCP:"$port" -sTCP:LISTEN >/dev/null || fail "update check changed the listener"
 
 # Actual WKWebView downloads: a blob anchor alone silently cancels on macOS
 # without the native download handler. Use only the isolated empty fixture.

@@ -5,7 +5,7 @@ OpenAPI 契约（100 个端点，勘误 E1）。桌面端在原生窗口中运�
 Go sidecar；CLI 与 STDIO MCP server 复用同一后端能力。
 
 当前已完成 ACL、Client Quota、Topic Analysis 与 KSQL 等批准范围；契约矩阵中 95 项已交付，
-Graphs、PrometheusExpose 与登录相关的 5 项保持 `exempt`。Settings 配置共享支持 YAML 导入导出、名称或完整地址判重、勾选替换及预览版本检查。设计决策、阶段记录与能力矩阵见
+Graphs、PrometheusExpose 与登录相关的 5 项保持 `exempt`。Settings 配置共享支持 YAML 导入导出、名称或完整地址判重、勾选替换及预览版本检查。桌面自动更新通过 Settings 展示状态，后台检查/限速下载不触发安装；需明确确认重启或预约下次启动，更新包必须验签。设计决策、阶段记录与能力矩阵见
 `docs/superpowers/specs/`、`docs/superpowers/plans/` 和 `docs/parity/feature-matrix.md`。
 
 ## 命令（一切以 make 为入口）

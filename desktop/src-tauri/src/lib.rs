@@ -7,6 +7,7 @@ pub mod protocol;
 pub mod settings;
 pub mod shutdown;
 pub mod tauri_host;
+pub mod updates;
 
 use crate::{
     host::{SupervisorTimings, desktop_data_directory, resolve_test_config, run_supervisor_loop},
@@ -53,6 +54,7 @@ pub fn run() {
             }
         }))
         .plugin(tauri_plugin_shell::init())
+        .plugin(tauri_plugin_updater::Builder::new().build())
         .on_window_event(move |window, event| {
             if window.label() == MAIN_WINDOW
                 && matches!(event, WindowEvent::CloseRequested { .. })
@@ -79,6 +81,16 @@ pub fn run() {
             let app_origin: SharedOrigin = Arc::new(RwLock::new(None));
             let sidecar_origin: SharedOrigin = Arc::new(RwLock::new(None));
             let view_state: SharedViewState = Arc::new(RwLock::new(DesktopViewState::starting()));
+            std::fs::create_dir_all(&data_directory)?;
+            let updater = updates::runtime::UpdateManager::new(
+                app.handle().clone(),
+                std::fs::canonicalize(&data_directory)?,
+                Arc::clone(&sidecar_origin),
+                sender.clone(),
+                Arc::clone(&setup_allow_exit),
+                test_config.is_some(),
+            )?;
+            app.manage(updater.clone());
 
             let navigation_app = Arc::clone(&app_origin);
             let navigation_sidecar = Arc::clone(&sidecar_origin);
@@ -101,6 +113,7 @@ pub fn run() {
                     .min_inner_size(1024.0, 700.0)
                     .resizable(true)
                     .devtools(cfg!(debug_assertions))
+                    .initialization_script("Object.defineProperty(window, '__CY_KAF_DESKTOP_UPDATES__', {value: true});")
                     .on_navigation(move |url| {
                         handle_navigation(
                             url,
@@ -166,6 +179,9 @@ pub fn run() {
             std::thread::Builder::new()
                 .name("cy-kaf-supervisor".into())
                 .spawn(move || {
+                    if updater.begin_session() {
+                        return;
+                    }
                     run_supervisor_loop(
                         host,
                         receiver,
@@ -199,6 +215,16 @@ fn handle_navigation(
     log_directory: &std::path::Path,
     app_handle: &tauri::AppHandle,
 ) -> bool {
+    if url.scheme() == "cy-kaf-action"
+        && url
+            .host_str()
+            .is_some_and(|host| host.starts_with("updates-"))
+    {
+        if let Some(updater) = app_handle.try_state::<updates::runtime::UpdateManager>() {
+            updater.handle_navigation(url);
+        }
+        return false;
+    }
     let app = match captured_app_origin(app_origin, url) {
         Some(origin) => origin,
         None => return false,

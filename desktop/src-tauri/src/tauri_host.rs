@@ -17,7 +17,7 @@ use std::{
     },
     time::{Duration, Instant},
 };
-use tauri::{AppHandle, WebviewWindow, async_runtime::Receiver, webview::Cookie};
+use tauri::{AppHandle, Manager, WebviewWindow, async_runtime::Receiver, webview::Cookie};
 use tauri_plugin_shell::{
     ShellExt,
     process::{CommandChild, CommandEvent},
@@ -122,6 +122,12 @@ impl HostIo for TauriHostIo {
             .map_err(|_| HostError::Spawn)?
             .args(args);
         let (receiver, child) = command.spawn().map_err(|_| HostError::Spawn)?;
+        if let Some(updater) = self
+            .app
+            .try_state::<crate::updates::runtime::UpdateManager>()
+        {
+            updater.record_sidecar(child.pid());
+        }
         Ok(Box::new(TauriChild { receiver, child }))
     }
 
@@ -180,6 +186,13 @@ impl HostIo for TauriHostIo {
     }
 
     fn exit(&self, code: i32) {
+        if let Some(updater) = self
+            .app
+            .try_state::<crate::updates::runtime::UpdateManager>()
+            && updater.finish_explicit_install(code)
+        {
+            return;
+        }
         self.allow_exit.store(true, Ordering::SeqCst);
         self.app.exit(code);
     }

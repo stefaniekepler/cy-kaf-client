@@ -8,3 +8,9 @@ Copyright the Kafbat project contributors and the original Provectus kafka-ui au
 
 Modifications: rebranding of product name and logos; frontend build wiring
 (contract path, generation scripts); backend re-implemented in Go.
+
+This product includes tauri-plugin-updater version 2.11.0
+(https://github.com/tauri-apps/plugins-workspace, commit
+6aa2854f314481a459be1189b02c65a2450789ab), distributed under the Apache License,
+Version 2.0. Copyright 2019-2023 Tauri Programme within The Commons Conservancy.
+Local modification: limit update metadata responses to 128 KiB before parsing.
