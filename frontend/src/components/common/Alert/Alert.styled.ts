@@ -24,6 +24,7 @@ export const Message = styled.div`
   font-weight: normal;
   font-size: 14px;
   margin: 3px 0;
+  white-space: pre-line;
 
   ol,
   ul {

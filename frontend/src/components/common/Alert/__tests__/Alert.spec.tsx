@@ -24,6 +24,10 @@ describe('Alert', () => {
     setupComponent();
     expect(screen.getByRole('heading')).toHaveTextContent(title);
     expect(screen.getByRole('contentinfo')).toHaveTextContent(message);
+    expect(screen.getByRole('contentinfo')).toHaveStyleRule(
+      'white-space',
+      'pre-line'
+    );
     expect(getButton()).toBeInTheDocument();
   });
   it('handles dismiss callback', async () => {

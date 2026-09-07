@@ -13,7 +13,7 @@ export const getIsValidConfig = (
     isValid = false;
     showAlert('error', {
       id: `${prefix}-kafka`,
-      title: 'Kafka Cluster',
+      title: 'Kafka 连接验证失败',
       message: clusterErrors?.kafka.errorMessage,
     });
   }
