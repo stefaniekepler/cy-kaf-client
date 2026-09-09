@@ -13,6 +13,7 @@ import {
   ApplicationInfo,
 } from 'generated-sources';
 import { QUERY_REFETCH_OFF_OPTIONS } from 'lib/constants';
+import { nextDuplicateName } from 'lib/duplicateClusterName';
 
 export function useAuthSettings() {
   return useSuspenseQuery({
@@ -108,6 +109,84 @@ export function useUpdateAppConfig({
       return appConfig.restartWithConfig({ restartRequest: { config } });
     },
     onSuccess: () => client.invalidateQueries({ queryKey: ['app', 'config'] }),
+  });
+}
+
+/**
+ * Clones one configured cluster: the running config is re-read so the copy
+ * carries every stored field (credentials included), and its name is derived
+ * from the freshest cluster list so concurrent edits cannot produce duplicates.
+ * Resolves with the name the copy was actually stored under.
+ */
+export function useDuplicateAppConfigCluster() {
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: async (sourceName: string) => {
+      const existingConfig = await appConfig.getCurrentConfig();
+      const existingClusters = existingConfig.properties?.kafka?.clusters || [];
+      const source = existingClusters.find(({ name }) => name === sourceName);
+      if (!source) {
+        throw new Error(`Cluster ${sourceName} is no longer configured`);
+      }
+
+      const name = nextDuplicateName(
+        sourceName,
+        existingClusters
+          .map((c) => c.name)
+          .filter((n): n is string => n !== undefined)
+      );
+      const clusters = aggregateClusters({ ...source, name }, existingConfig);
+      const config = {
+        ...existingConfig,
+        properties: {
+          ...existingConfig.properties,
+          kafka: { clusters },
+        },
+      };
+      await appConfig.restartWithConfig({ restartRequest: { config } });
+      return name;
+    },
+    onSuccess: () => {
+      client.invalidateQueries({ queryKey: ['app', 'config'] });
+      client.invalidateQueries({ queryKey: ['clusters'] });
+    },
+  });
+}
+
+/**
+ * Removes one configured cluster. The running config is re-read first so the
+ * write keeps every unmodelled sibling property, and a cluster that is already
+ * gone fails loudly instead of silently rewriting the file.
+ */
+export function useDeleteAppConfigCluster() {
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: async (clusterName: string) => {
+      const existingConfig = await appConfig.getCurrentConfig();
+      const existingClusters = existingConfig.properties?.kafka?.clusters || [];
+      if (!existingClusters.some(({ name }) => name === clusterName)) {
+        throw new Error(`Cluster ${clusterName} is no longer configured`);
+      }
+
+      const clusters = aggregateClusters(
+        { name: clusterName },
+        existingConfig,
+        clusterName,
+        true
+      );
+      const config = {
+        ...existingConfig,
+        properties: {
+          ...existingConfig.properties,
+          kafka: { clusters },
+        },
+      };
+      await appConfig.restartWithConfig({ restartRequest: { config } });
+    },
+    onSuccess: () => {
+      client.invalidateQueries({ queryKey: ['app', 'config'] });
+      client.invalidateQueries({ queryKey: ['clusters'] });
+    },
   });
 }
 

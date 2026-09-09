@@ -63,7 +63,7 @@ const UpdateSection: React.FC<Props> = ({ active }) => {
 
   return (
     <S.Section>
-      <S.SectionHeading>Updates</S.SectionHeading>
+      <S.SectionHeading>更新</S.SectionHeading>
       {!status && <p>Loading update status...</p>}
       {status?.status === 'idle' && <p>Version {status.currentVersion}</p>}
       {status?.status === 'checking' && <p>Checking for updates...</p>}
@@ -74,7 +74,6 @@ const UpdateSection: React.FC<Props> = ({ active }) => {
             : `Downloading update: ${progress}%`}
         </p>
       )}
-      {status?.status === 'up_to_date' && <p>You are up to date.</p>}
       {status?.status === 'installing' && <p>Installing update...</p>}
       {(status?.status === 'unavailable' || status?.available === false) && (
         <p>{status.message || 'Updates are unavailable.'}</p>
@@ -130,6 +129,9 @@ const UpdateSection: React.FC<Props> = ({ active }) => {
           >
             Check for updates
           </Button>
+          {status?.status === 'up_to_date' && (
+            <S.UpToDate>You are up to date.</S.UpToDate>
+          )}
           {ready && (
             <>
               <Button

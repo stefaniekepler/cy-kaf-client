@@ -49,7 +49,10 @@ describe('UpdateSection', () => {
     render(<UpdateSection active />);
 
     expect(
-      screen.queryByRole('heading', { name: 'Updates' })
+      screen.queryByRole('heading', { name: '更新' })
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole('button', { name: 'Check for updates' })
     ).not.toBeInTheDocument();
     expect(locationAssign).not.toHaveBeenCalled();
   });
@@ -72,6 +75,50 @@ describe('UpdateSection', () => {
       );
     });
     expect(screen.queryByText('You are up to date.')).not.toBeInTheDocument();
+  });
+
+  it('shows the up-to-date notice only once a check confirmed it', () => {
+    render(<UpdateSection active />);
+
+    const push = (state: string, overrides: Record<string, unknown> = {}) =>
+      act(() => {
+        window.dispatchEvent(
+          new CustomEvent('cy-kaf-update-status', {
+            detail: status(state, overrides),
+          })
+        );
+      });
+
+    push('idle');
+    expect(screen.queryByText('You are up to date.')).not.toBeInTheDocument();
+
+    push('checking');
+    expect(screen.queryByText('You are up to date.')).not.toBeInTheDocument();
+
+    push('ready', { version: '1.3.0' });
+    expect(screen.queryByText('You are up to date.')).not.toBeInTheDocument();
+
+    push('up_to_date');
+    expect(screen.getByText('You are up to date.')).toBeVisible();
+  });
+
+  it('renders the up-to-date notice in muted green after the check button', () => {
+    render(<UpdateSection active />);
+
+    act(() => {
+      window.dispatchEvent(
+        new CustomEvent('cy-kaf-update-status', {
+          detail: status('up_to_date'),
+        })
+      );
+    });
+
+    expect(screen.getByRole('heading', { name: '更新' })).toBeVisible();
+    const notice = screen.getByText('You are up to date.');
+    expect(notice).toHaveStyleRule('color', '#29a352');
+
+    const check = screen.getByRole('button', { name: 'Check for updates' });
+    expect(check.nextElementSibling).toBe(notice);
   });
 
   it('uses the native disabled state until update checks are available', () => {

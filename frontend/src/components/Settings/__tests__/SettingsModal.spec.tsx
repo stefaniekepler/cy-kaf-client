@@ -162,10 +162,10 @@ describe('SettingsModal', () => {
     renderModal();
 
     const dialog = screen.getByRole('dialog', { name: 'Settings' });
-    expect(within(dialog).getByRole('heading', { name: 'MCP' })).toBeVisible();
     expect(
-      within(dialog).getByRole('heading', { name: 'Diagnostics' })
+      within(dialog).getByRole('heading', { name: 'MCP配置' })
     ).toBeVisible();
+    expect(within(dialog).getByRole('heading', { name: '日志' })).toBeVisible();
     expect(
       within(dialog).getAllByText('Available in the desktop app only.')
     ).toHaveLength(2);
@@ -176,6 +176,53 @@ describe('SettingsModal', () => {
     expect(updateSettings).not.toHaveBeenCalled();
     expect(configureClient).not.toHaveBeenCalled();
     expect(locationAssign).not.toHaveBeenCalled();
+  });
+
+  it('groups updates and the log directory into the last section', () => {
+    Object.defineProperty(window, '__CY_KAF_DESKTOP_UPDATES__', {
+      configurable: true,
+      value: true,
+    });
+    renderModal();
+
+    act(() => {
+      window.dispatchEvent(
+        new CustomEvent('cy-kaf-update-status', {
+          detail: {
+            available: true,
+            currentVersion: '1.2.3',
+            status: 'idle',
+            downloadedBytes: 0,
+            scheduled: false,
+          },
+        })
+      );
+    });
+
+    const dialog = screen.getByRole('dialog', { name: 'Settings' });
+    expect(
+      within(dialog)
+        .getAllByRole('heading', { level: 2 })
+        .map((heading) => heading.textContent)
+    ).toEqual(['环境配置', 'MCP配置', '日志', '更新']);
+
+    const logs = within(dialog)
+      .getByRole('heading', { name: '日志' })
+      .closest('section') as HTMLElement;
+    expect(
+      within(logs).getByRole('button', { name: 'Open log directory' })
+    ).toBeVisible();
+    expect(
+      within(logs).queryByRole('button', { name: 'Check for updates' })
+    ).not.toBeInTheDocument();
+
+    const updates = within(dialog)
+      .getByRole('heading', { name: '更新' })
+      .closest('section') as HTMLElement;
+    expect(within(updates).getByText('Version 1.2.3')).toBeVisible();
+    expect(
+      within(updates).getByRole('button', { name: 'Check for updates' })
+    ).toBeVisible();
   });
 
   it('keeps the focused Settings control unchanged during update progress', () => {
@@ -854,7 +901,7 @@ describe('SettingsModal', () => {
       window.dispatchEvent(new Event('cy-kaf-open-logs-error'));
     });
     const diagnostics = screen
-      .getByRole('heading', { name: 'Diagnostics' })
+      .getByRole('heading', { name: '日志' })
       .closest('section');
     expect(
       within(diagnostics as HTMLElement).getByRole('alert')

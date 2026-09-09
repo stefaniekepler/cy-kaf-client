@@ -22,6 +22,12 @@ export const SectionHeading = styled.h2`
   margin: 0 0 14px;
 `;
 
+export const UpToDate = styled.p`
+  align-self: center;
+  color: #29a352;
+  margin: 0 0 0 4px;
+`;
+
 export const Limitation = styled.p`
   color: ${({ theme }) => theme.modal.contentColor};
   margin: 0;

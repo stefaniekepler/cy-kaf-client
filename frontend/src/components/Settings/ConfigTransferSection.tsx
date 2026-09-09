@@ -160,10 +160,6 @@ const ConfigTransferSection: React.FC = () => {
   return (
     <S.Section>
       <S.SectionHeading>环境配置</S.SectionHeading>
-      <T.Description>
-        共享全部 Kafka 环境的 YAML
-        配置。文件包含认证信息；本地证书文件需另行准备。
-      </T.Description>
       <S.Actions>
         <Button
           buttonType="secondary"

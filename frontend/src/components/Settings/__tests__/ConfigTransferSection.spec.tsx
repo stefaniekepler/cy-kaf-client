@@ -27,6 +27,16 @@ const upload = async () =>
 
 afterEach(() => fetchMock.restore());
 
+it('shows the transfer actions without a descriptive paragraph', () => {
+  render(<ConfigTransferSection />);
+
+  expect(screen.getByRole('heading', { name: '环境配置' })).toBeVisible();
+  expect(screen.getByRole('button', { name: '一键导出配置' })).toBeVisible();
+  expect(
+    screen.queryByText(/共享全部 Kafka 环境的 YAML/)
+  ).not.toBeInTheDocument();
+});
+
 it('defaults conflicts to local and submits only the selected entries', async () => {
   fetchMock.post(previewPath, {
     revision: 'r1',

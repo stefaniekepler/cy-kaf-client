@@ -320,9 +320,8 @@ const SettingsModal: React.FC<Props> = ({ isOpen, onClose, triggerRef }) => {
       >
         <S.Content>
           <ConfigTransferSection />
-          <UpdateSection active={isOpen} />
           <S.Section>
-            <S.SectionHeading>MCP</S.SectionHeading>
+            <S.SectionHeading>MCP配置</S.SectionHeading>
             {settingsQuery.isLoading && <p>Loading MCP settings...</p>}
             {settingsQuery.error && (
               <S.Alerts>
@@ -451,7 +450,7 @@ const SettingsModal: React.FC<Props> = ({ isOpen, onClose, triggerRef }) => {
           </S.Section>
 
           <S.Section>
-            <S.SectionHeading>Diagnostics</S.SectionHeading>
+            <S.SectionHeading>日志</S.SectionHeading>
             {settingsQuery.data?.available === false ? (
               <S.Limitation>Available in the desktop app only.</S.Limitation>
             ) : (
@@ -480,6 +479,8 @@ const SettingsModal: React.FC<Props> = ({ isOpen, onClose, triggerRef }) => {
               )
             )}
           </S.Section>
+
+          <UpdateSection active={isOpen} />
         </S.Content>
       </Modal>
 

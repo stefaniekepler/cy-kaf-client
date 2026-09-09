@@ -78,7 +78,7 @@ const Dashboard: React.FC = () => {
         header: '',
         id: 'actions',
         cell: ClusterTableActionsCell,
-        size: 140,
+        size: 290,
       });
     }
 
