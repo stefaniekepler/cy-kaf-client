@@ -19,6 +19,9 @@ import { useLocalStorage } from 'lib/hooks/useLocalStorage';
 import { ClusterColorKey } from 'theme/theme';
 import useScrollIntoView from 'lib/hooks/useScrollIntoView';
 
+export const clusterMenuOpenKey = (name: Cluster['name']) =>
+  `clusterMenu-${name}-isOpen`;
+
 interface ClusterMenuProps {
   name: Cluster['name'];
   status: Cluster['status'];
@@ -36,7 +39,7 @@ const ClusterMenu: FC<ClusterMenuProps> = ({
     features?.includes(key);
 
   const [isOpen, setIsOpen] = useLocalStorage<boolean>(
-    `clusterMenu-${name}-isOpen`,
+    clusterMenuOpenKey(name),
     opened
   );
   const location = useLocation();

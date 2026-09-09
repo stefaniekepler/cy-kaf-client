@@ -3,10 +3,11 @@ import { useClusters } from 'lib/hooks/api/clusters';
 import useCurrentClusterName from 'lib/hooks/useCurrentClusterName';
 import { useLocation } from 'react-router-dom';
 import AllClustersIcon from 'components/common/Icons/AllClustersIcon';
+import { writeLocalStorageValue } from 'lib/hooks/useLocalStorage';
 
 import * as S from './Nav.styled';
 import MenuItem from './Menu/MenuItem';
-import ClusterMenu from './ClusterMenu/ClusterMenu';
+import ClusterMenu, { clusterMenuOpenKey } from './ClusterMenu/ClusterMenu';
 import AllClustersReminder from './AllClustersReminder/AllClustersReminder';
 
 const ALL_CLUSTERS_PATHS = new Set(['/', '/ui', '/ui/clusters']);
@@ -26,6 +27,13 @@ const Nav: FC<NavProps> = ({
   const normalizedPathname = location.pathname.replace(/\/+$/, '') || '/';
   const isAllClustersActive = ALL_CLUSTERS_PATHS.has(normalizedPathname);
 
+  // 回到全部集群视图时收起侧边栏里所有展开的集群菜单。
+  const collapseAllClusterMenus = () => {
+    clusters.data?.forEach(({ name }) =>
+      writeLocalStorageValue(clusterMenuOpenKey(name), false)
+    );
+  };
+
   return (
     <>
       <S.Navigation aria-label="Sidebar Menu">
@@ -37,6 +45,7 @@ const Nav: FC<NavProps> = ({
               title="All clusters"
               icon={<AllClustersIcon />}
               isActive={isAllClustersActive}
+              onClick={collapseAllClusterMenus}
               isEmphasized
             />
           </S.List>

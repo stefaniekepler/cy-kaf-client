@@ -8,6 +8,7 @@ import { useClusters } from 'lib/hooks/api/clusters';
 import { Cluster, ControllerType, ServerStatus } from 'generated-sources';
 import { useGetUserInfo } from 'lib/hooks/api/roles';
 import { clusterBrokersPath } from 'lib/paths';
+import { resetAllClustersReminderSession } from 'components/PageContainer/useAllClustersReminder';
 
 jest.mock('components/Version/Version', () => () => <div>Version</div>);
 
@@ -68,6 +69,7 @@ describe('Page Container', () => {
   beforeEach(() => {
     mockedNavigate.mockClear();
     setWindowWidth(1280);
+    resetAllClustersReminderSession();
   });
 
   afterAll(() => {

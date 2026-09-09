@@ -10,6 +10,7 @@ export interface MenuItemProps {
   isActive?: boolean;
   isEmphasized?: boolean;
   icon?: ReactNode;
+  onClick?: () => void;
 }
 
 const MenuItem: FC<MenuItemProps> = ({
@@ -19,10 +20,12 @@ const MenuItem: FC<MenuItemProps> = ({
   isEmphasized = false,
   variant = 'secondary',
   icon,
+  onClick,
 }) => (
   <Link
     to={to}
     title={title}
+    onClick={onClick}
     aria-current={isActive ? 'page' : undefined}
     className={isActive ? 'active' : undefined}
   >

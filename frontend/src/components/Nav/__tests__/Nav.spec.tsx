@@ -6,6 +6,9 @@ import { useLocation } from 'react-router-dom';
 import { render } from 'lib/testHelpers';
 import { Cluster } from 'generated-sources';
 import { useClusters } from 'lib/hooks/api/clusters';
+import { writeLocalStorageValue } from 'lib/hooks/useLocalStorage';
+import { clusterMenuOpenKey } from 'components/Nav/ClusterMenu/ClusterMenu';
+import { LOCAL_STORAGE_KEY_PREFIX } from 'lib/constants';
 import { theme } from 'theme/theme';
 import {
   offlineClusterPayload,
@@ -51,6 +54,34 @@ describe('Nav', () => {
       .find((element) => element.getAttribute('aria-live') === 'polite');
 
   const getMenuItemsCount = () => screen.getAllByRole('menuitem').length;
+
+  it('collapses every cluster menu when All clusters is clicked', async () => {
+    // jsdom 未实现 scrollIntoView，展开的集群菜单会用到它
+    window.HTMLElement.prototype.scrollIntoView = jest.fn();
+    const clusters = [onlineClusterPayload, offlineClusterPayload];
+    clusters.forEach(({ name }) =>
+      writeLocalStorageValue(clusterMenuOpenKey(name), true)
+    );
+
+    renderComponent(clusters, `/ui/clusters/${onlineClusterPayload.name}`);
+    expect(screen.getAllByRole('link', { name: 'Brokers' })).toHaveLength(
+      clusters.length
+    );
+
+    await userEvent.click(getAllClustersLink());
+
+    expect(
+      screen.queryByRole('link', { name: 'Brokers' })
+    ).not.toBeInTheDocument();
+    clusters.forEach(({ name }) =>
+      expect(
+        localStorage.getItem(
+          `${LOCAL_STORAGE_KEY_PREFIX}-${clusterMenuOpenKey(name)}`
+        )
+      ).toBe('false')
+    );
+    localStorage.clear();
+  });
 
   it('keeps the global navigation visible while clusters are unavailable', () => {
     renderComponent([], '/', false);

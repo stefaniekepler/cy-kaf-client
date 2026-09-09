@@ -6,6 +6,7 @@ import {
 } from 'lib/paths';
 import useAllClustersReminder, {
   getIsClusterRoute,
+  resetAllClustersReminderSession,
 } from 'components/PageContainer/useAllClustersReminder';
 
 type HookProps = {
@@ -38,6 +39,8 @@ describe('getIsClusterRoute', () => {
 });
 
 describe('useAllClustersReminder', () => {
+  beforeEach(() => resetAllClustersReminderSession());
+
   it('stays hidden outside cluster context', () => {
     const { result } = renderReminder({
       isClusterRoute: false,
@@ -220,22 +223,17 @@ describe('useAllClustersReminder', () => {
     expect(result.current.isAllClustersReminderVisible).toBe(false);
   });
 
-  it('resets only after leaving cluster context following dismissal', () => {
+  it('stays dismissed for the rest of the session once it has been shown', () => {
     const { result, rerender } = renderReminder({
       isClusterRoute: true,
       isSidebarVisible: true,
       isLarge: true,
     });
+    expect(result.current.isAllClustersReminderVisible).toBe(true);
 
     act(() => result.current.dismissAllClustersReminder());
 
-    rerender({
-      isClusterRoute: true,
-      isSidebarVisible: true,
-      isLarge: true,
-    });
-    expect(result.current.isAllClustersReminderVisible).toBe(false);
-
+    // 离开集群上下文后再进入另一个集群：本次 App 会话内不再提醒
     rerender({
       isClusterRoute: false,
       isSidebarVisible: true,
@@ -247,6 +245,42 @@ describe('useAllClustersReminder', () => {
       isLarge: true,
     });
 
-    expect(result.current.isAllClustersReminderVisible).toBe(true);
+    expect(result.current.isAllClustersReminderVisible).toBe(false);
+  });
+
+  it('does not remind a freshly mounted hook after an earlier cluster visit', () => {
+    const first = renderReminder({
+      isClusterRoute: true,
+      isSidebarVisible: true,
+      isLarge: true,
+    });
+    expect(first.result.current.isAllClustersReminderVisible).toBe(true);
+    first.unmount();
+
+    const second = renderReminder({
+      isClusterRoute: true,
+      isSidebarVisible: true,
+      isLarge: true,
+    });
+    expect(second.result.current.isAllClustersReminderVisible).toBe(false);
+  });
+
+  it('reminds again in a new app session', () => {
+    const first = renderReminder({
+      isClusterRoute: true,
+      isSidebarVisible: true,
+      isLarge: true,
+    });
+    expect(first.result.current.isAllClustersReminderVisible).toBe(true);
+    first.unmount();
+
+    resetAllClustersReminderSession();
+
+    const second = renderReminder({
+      isClusterRoute: true,
+      isSidebarVisible: true,
+      isLarge: true,
+    });
+    expect(second.result.current.isAllClustersReminderVisible).toBe(true);
   });
 });

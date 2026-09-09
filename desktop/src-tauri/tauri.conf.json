@@ -1,6 +1,6 @@
 {
   "productName": "Cy KafClient",
-  "version": "0.1.4",
+  "version": "0.1.5",
   "identifier": "com.cykaf.client",
   "build": {
     "frontendDist": "../bootstrap"

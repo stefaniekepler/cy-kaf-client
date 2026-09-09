@@ -55,6 +55,13 @@ const setStorageValue = <T>(key: string, value: T): void => {
   }
 };
 
+/**
+ * Writes one feature key outside of a component and notifies every
+ * `useLocalStorage` subscriber of that key, so mounted consumers re-render.
+ */
+export const writeLocalStorageValue = <T>(featureKey: string, value: T): void =>
+  setStorageValue(`${LOCAL_STORAGE_KEY_PREFIX}-${featureKey}`, value);
+
 export const useLocalStorage = <T>(
   featureKey: string,
   defaultValue: T

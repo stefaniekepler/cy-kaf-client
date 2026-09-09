@@ -45,13 +45,14 @@ const Dashboard: React.FC = () => {
         accessorKey: 'name',
         cell: ClusterName,
         meta: { width: '100%' },
+        size: 240,
         enableResizing: true,
       },
-      { header: 'Version', accessorKey: 'version', size: 100 },
+      { header: 'Version', accessorKey: 'version', size: 90 },
       {
         header: 'Brokers count',
         accessorKey: 'brokerCount',
-        size: 120,
+        size: 124,
       },
       {
         header: 'Partitions',

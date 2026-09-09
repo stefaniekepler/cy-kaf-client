@@ -15,6 +15,13 @@ type UseAllClustersReminderProps = {
   isLarge: boolean;
 };
 
+// 每次打开 App（一次页面会话）只提醒一次：模块级标记随刷新/重启自然复位。
+let hasRemindedThisSession = false;
+
+export const resetAllClustersReminderSession = () => {
+  hasRemindedThisSession = false;
+};
+
 const normalizePathname = (pathname: string) =>
   pathname.replace(/\/+$/, '') || '/';
 
@@ -34,6 +41,7 @@ const getEntryPhase = ({
   isLarge,
 }: UseAllClustersReminderProps): ReminderPhase => {
   if (!isClusterRoute) return 'idle';
+  if (hasRemindedThisSession) return 'shown';
   if (isLarge && isSidebarVisible) return 'visible';
   if (!isLarge && isSidebarVisible) return 'awaiting-sidebar-close';
   return 'pending';
@@ -86,6 +94,12 @@ const useAllClustersReminder = ({
       return currentPhase;
     });
   }, [isClusterRoute, isSidebarVisible, isLarge]);
+
+  useEffect(() => {
+    if (phase === 'visible') {
+      hasRemindedThisSession = true;
+    }
+  }, [phase]);
 
   const dismissAllClustersReminder = useCallback(() => {
     setPhase('shown');
